@@ -446,7 +446,7 @@ def clustering_powerspectra(ls):
             Ws[i,j]=W(density_strings[i],chis[j])
             
     for i in range(0,len(density_strings)):
-        Ws1=W[i]
+        Ws1=Ws[i]
         cut_off_ls=np.array(ls)[np.array(ls)<upperlimits[i]]
         clustering_powerspectra[i,0:len(cut_off_ls)]=get_Cls(cut_off_ls,Ws1,Ws1,Pnonlin,chis,zs)
     return clustering_powerspectra

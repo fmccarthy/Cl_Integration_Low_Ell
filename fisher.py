@@ -183,12 +183,9 @@ class Fisher_forecast(object):
                                                                     #should be symmetric on second, third indices
         
         
-        self.dCldfnl_no_lensing_sparse=np.zeros((self.covariance_matrix_nolensing_sparse.shape[0],
-                                       self.covariance_matrix_nolensing_sparse.shape[1],
-                                       self.covariance_matrix_nolensing_sparse.shape[2])) 
+       
         
-        
-        self.dCldfnl_sparse()
+        self._dCldfnl_sparse()
         
         print("got dcldalpha")
 
@@ -233,60 +230,50 @@ class Fisher_forecast(object):
     
     
     
-    def get_Cl_fnl_squared_deriv(self,ls,specs,matter_pk):#specs tells you which power spectrum you want
+    def get_Cl_fnl_squared_deriv(self,ls,Ws1,Ws2,matter_pk,chis,zs):#specs tells you which power spectrum you want
     
-        #chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(4)),50)
-        #zs=redshift(chis)
-       
-        Ws=[power_spectra.W(specs[0],chi)*power_spectra.W(specs[1],chi)/chi**2 for chi in self.chis]
-    
+        
         Cls=[]
     
         for l_index,l in enumerate(ls):
-            Ks=(l+1/2)/self.chis
+            Ks=(l+1/2)/chis
 
-            integrand=[2*Ws[k]*matter_pk(self.zs[k],Ks[k])/power_spectra.bg(self.zs[k])*1/Ks[k]**2*(power_spectra.bg(self.zs[k])-1)*self.factors[k,l_index]for k in range(0,len(self.chis))]
+            integrand=[2*Ws1[k]*Ws2[k]/chis[k]**2*matter_pk(zs[k],Ks[k])/power_spectra.bg(zs[k])*1/Ks[k]**2*(power_spectra.bg(zs[k])-1)*self.factors[k,l_index]for k in range(0,len(chis))]
         
-            Cls.append(np.trapz(integrand,self.chis))
+            Cls.append(np.trapz(integrand,chis))
         
         return np.array(Cls)
 
-    def get_Cl_fnl_deriv(self,ls,specs,matter_pk):#specs tells you which power spectrum you want
-    
-        #chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(4)),50)
-        #zs=redshift(chis)
-        
-
-        Ws=[power_spectra.W(specs[0],chi)*power_spectra.W(specs[1],chi)/chi**2 for chi in self.chis]
+    def get_Cl_fnl_deriv(self,ls,Ws1,Ws2,matter_pk,chis,zs):#specs tells you which power spectrum you want
     
         Cls=[]
     
         for l_index,l in enumerate(ls):
-            Ks=(l+1/2)/self.chis
+            Ks=(l+1/2)/chis
        
-            integrand=[Ws[k]*matter_pk(self.zs[k],Ks[k])/power_spectra.bg(self.zs[k])*1/Ks[k]**2*(power_spectra.bg(self.zs[k])-1)*self.factors[k,l_index]for k in range(0,len(self.chis))]
+            integrand=[Ws1[k]*Ws2[k]/chis[k]**2*matter_pk(zs[k],Ks[k])/power_spectra.bg(zs[k])*1/Ks[k]**2*(power_spectra.bg(zs[k])-1)*self.factors[k,l_index]for k in range(0,len(chis))]
         
-            Cls.append(np.trapz(integrand,self.chis))
+            Cls.append(np.trapz(integrand,chis))
         
         return np.array(Cls)
 
     
     
-    def dCldfnl_sparse(self):
+    def _dCldfnl_sparse(self):
         
         print("getting dcldfnl")
         
-        self.zs=np.linspace(0.2,1,50)
-        self.chis=power_spectra.comoving_distance(self.zs)
-        self.ks=np.zeros((len(self.zs),len(self.ls)))
+        zs=np.linspace(0.2,1,50)
+        chis=power_spectra.comoving_distance(zs)
+        self.ks=np.zeros((len(zs),len(self.ls)))
         
         
         
-        self.factors=np.zeros((len(self.zs),len(self.ls)))
-        for i in range(0,len(self.zs)):
+        self.factors=np.zeros((len(zs),len(self.ls)))
+        for i in range(0,len(zs)):
             for j in range(0,len(self.ls)):
-                k=(self.ls[j]+1/2)/self.chis
-                self.factors[i,j]=power_spectra.factor(k[i],self.chis[i])        #i gives z index, j gives l index
+                k=(self.ls[j]+1/2)/chis
+                self.factors[i,j]=power_spectra.factor(k[i],chis[i])        #i gives z index, j gives l index
 
         density_strings=["density_"+str(i)for i in range(1,self.lensing_bins+1)]
         
@@ -294,13 +281,17 @@ class Fisher_forecast(object):
 
         print("getting dcldfnl^2")
 
-        
+        Ws_densities=np.zeros((len(density_strings),len(chis)))
         #b^2 derivs:
         for i in range(0,len(density_strings)):
+            for j in range(0,len(chis)):
+                
+                Ws_densities[i,j]=power_spectra.W(density_strings[i],chis[j])
+
      #       print(i/len(density_strings))
             cut_off_ls=np.array(self.ls)[np.array(self.ls)<power_spectra.upperlimits[i]]
 
-            cls_galgal_deriv=self.get_Cl_fnl_squared_deriv(cut_off_ls,[density_strings[i],density_strings[i]],power_spectra.Pnonlin)
+            cls_galgal_deriv=self.get_Cl_fnl_squared_deriv(cut_off_ls,Ws_densities[i],Ws_densities[i],power_spectra.Pnonlin,chis,zs)
             self.dCldfnl_sparse[i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
     
             self.dCldfnl_sparse[i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
@@ -309,19 +300,24 @@ class Fisher_forecast(object):
 
         #b^1 derivs:
         print("getting dcldfnl^1")
+        Ws_shears=np.zeros((len(shearstrings),len(chis)))
+        for i in range(0,config.source_bins):
+            for j in range(0,len(chis)):
+                
+                Ws_shears[i,j]=power_spectra.W(shearstrings[i],chis[j])
 
-
+    
         for i in range(0,len(density_strings)):
-            print(i)
+           # print(i)
             cut_off_ls=np.array(self.ls)[np.array(self.ls)<power_spectra.upperlimits[i]]
 
             for j in range(0,config.source_bins):
-                print(i,j)
+               # print(i,j)
               #  print(i/len(density_strings),j/len(self.shears))
        
-                cls_galgal_deriv=self.get_Cl_fnl_deriv(cut_off_ls,[density_strings[i],shearstrings[j]],power_spectra.Pnonlin)
+                cls_galgal_deriv=self.get_Cl_fnl_deriv(cut_off_ls,Ws_densities[i],Ws_shears[j],power_spectra.Pnonlin,chis,zs)
                 self.dCldfnl_sparse[i,j+self.lensing_bins,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
-    
+                self.dCldfnl_sparse[j+self.lensing_bins,i,0:len(cut_off_ls)]=cls_galgal_deriv
     def dCldfnl_interpolated(self):
         
         
@@ -692,14 +688,14 @@ class Fisher_forecast(object):
     
         
         
-    def optimal_correlation_coefficient(self,covariance,lensing_noise,clustering_noise):
+    def optimal_correlation_coefficient(self,covariance,lensing_noise,clustering_noise,ls):
     
     # we want this to return the optimal corellation coefficients for a linear combination
     # of clutering fields with each shear field.
     # see appendix of 1502.05356
     
     
-        optimal_corr_coeffs=np.zeros((config.source_bins,len(self.ls)))
+        optimal_corr_coeffs=np.zeros((config.source_bins,len(ls)))
     
         for i in range(0,config.source_bins):
         
@@ -711,7 +707,7 @@ class Fisher_forecast(object):
             Qinverse=np.zeros(Qs.shape)
     
     
-            for l in range(0,len(self.ls)):
+            for l in range(0,len(ls)):
                 Qinverse[:,:,l]=np.linalg.inv(Qs[:,:,l])
         
             

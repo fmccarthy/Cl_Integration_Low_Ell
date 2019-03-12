@@ -2,7 +2,7 @@ import numpy as np
 
 
 
-lensing_bins=8
+lensing_bins=16
 source_bins=10
 
 
