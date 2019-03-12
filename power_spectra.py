@@ -408,8 +408,8 @@ def shear_power_spectra(ls):
     shears=["shear_"+str(i)for i in range(0,config.source_bins)]
     shear_powerspectra=np.zeros((len(shears),len(shears),len(ls)))
     
-    zs=np.linspace(0.01,4,1000)
-    chis=power_spectra.comoving_distance(zs)
+    zs=np.linspace(0.01,4,100)
+    chis=comoving_distance(zs)
     
     Ws=np.zeros((len(shears),len(zs)))
     for i in range(0,len(shears)):
@@ -426,9 +426,7 @@ def shear_power_spectra(ls):
             
                 shear_powerspectra[i,j]=get_Cls(ls,Ws1,Ws2,Pnonlin,chis,zs)
             else:
-                    shear_powerspectra[i,j]=shear_powerspectra[j,i]
-            
-        
+                    shear_powerspectra[i,j]=shear_powerspectra[j,i]          
     return shear_powerspectra
 
 
@@ -438,10 +436,19 @@ def clustering_powerspectra(ls):
     
     density_strings=["density_"+str(i)for i in range(1,1+config.lensing_bins)]
     clustering_powerspectra=np.zeros((len(density_strings),len(ls)))
-   
+    zs=np.linspace(0.01,4,100)
+    chis=comoving_distance(zs)
+    Ws=np.zeros((len(density_strings),len(zs)))
+
     for i in range(0,len(density_strings)):
+
+        for j in range(0,len(zs)):
+            Ws[i,j]=W(density_strings[i],chis[j])
+            
+    for i in range(0,len(density_strings)):
+        Ws1=W[i]
         cut_off_ls=np.array(ls)[np.array(ls)<upperlimits[i]]
-        clustering_powerspectra[i,0:len(cut_off_ls)]=get_Cls(cut_off_ls,[density_strings[i],density_strings[i]],Pnonlin)
+        clustering_powerspectra[i,0:len(cut_off_ls)]=get_Cls(cut_off_ls,Ws1,Ws1,Pnonlin,chis,zs)
     return clustering_powerspectra
 
 
@@ -449,15 +456,29 @@ def clustering_powerspectra(ls):
 def cross_powerspectra(ls):
     shears=["shear_"+str(i)for i in range(0,config.source_bins)]
     density_strings=["density_"+str(i)for i in range(1,config.lensing_bins+1)]
+    zs=np.linspace(0.01,4,100)
+    chis=comoving_distance(zs)
+    Wsclust=np.zeros((len(density_strings),len(zs)))
+    Wsshear=np.zeros((len(shears),len(zs)))
+    for i in range(0,len(density_strings)):
 
+        for j in range(0,len(zs)):
+            Wsclust[i,j]=W(density_strings[i],chis[j])
+            
+    for i in range(0,len(shears)):
+
+        for j in range(0,len(zs)):
+            Wsshear[i,j]=W(shears[i],chis[j])
+            
+            
     cross_powerspectra=np.zeros((len(density_strings),len(shears),len(ls)))
 
     for i in range(0,len(density_strings)):
         cut_off_ls=np.array(ls)[np.array(ls)<upperlimits[i]]
-
+        Ws1=Wsclust[i]
         for j in range(0,len(shears)):
-            
-            cross_powerspectra[i,j,0:len(cut_off_ls)]=get_Cls(cut_off_ls,[density_strings[i],shears[j]],Pnonlin)
+            Ws2=Wsshear[j]
+            cross_powerspectra[i,j,0:len(cut_off_ls)]=get_Cls(cut_off_ls,Ws1,Ws2,Pnonlin,chis,zs)
             
     return cross_powerspectra
 
