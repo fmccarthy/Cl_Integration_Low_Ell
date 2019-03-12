@@ -16,7 +16,7 @@ from scipy.interpolate import interp1d
 
 class Fisher_forecast(object):
     
-
+  
     def __init__(self):
         
         self.lensing_bins=config.lensing_bins
