@@ -35,83 +35,64 @@ class Fisher_forecast(object):
         
         self.ls=ls
         
-        #self.all_ells=range(ls[0],ls[-1])
-        self.all_ells=ls
+        self.all_ells=range(ls[0],ls[-1])
+        #self.all_ells=ls
         
         if recompute:
             
            self.shears,self.clusterings,self.cross=power_spectra.Cls(ls)
-           self.covariance_matrix=self.covariance(ls)
+           self.covariance_matrix_sparse=self.covariance(ls)
        
         else:
              covariancefile=np.load("../saved_arrays/"+str(config.lensing_bins)+"_bins_lmin_"+str(self.ls[0])+".npz")
              
-             self.covariance_matrix=covariancefile["cov"]
-            
-        
-             self.dCldalpha=covariancefile["dcldalpha"]
-             self.dCldalpha_no_lensing=self.dCldalpha[0:config.lensing_bins,0:config.lensing_bins,:]
+             self.covariance_matrix_sparse=covariancefile["cov"]        
+             self.dCldfnl_sparse=covariancefile["dcldalpha"][0]
 
         self.interpolate_covariancematrix()
          
         self.covariance_matrix_nolensing=self.covariance_matrix[0:config.lensing_bins,0:config.lensing_bins,:]
-        self.covariance_matrix_nolensing_interpolated=self.covariance_matrix_interpolated[0:config.lensing_bins,0:config.lensing_bins,:]
 
         
-        self.clustering_noise_matrix=self.clustering_noise(ls)
-        self.clustering_noise_matrix_interpolated=self.clustering_noise(self.all_ells)
+        self.clustering_noise_matrix=self.clustering_noise(self.all_ells)
 
         
-        self.clustering_noise_matrix_nolensing=self.clustering_noise(ls,False)
-        self.clustering_noise_matrix_nolensing_interpolated=self.clustering_noise(self.all_ells,False)
+        self.clustering_noise_matrix_nolensing=self.clustering_noise(self.all_ells,False)
 
         
-        self.shear_noise_matrix=self.lensing_noise(ls)
-        self.shear_noise_matrix_interpolated=self.lensing_noise(self.all_ells)
+        self.shear_noise_matrix=self.lensing_noise(self.all_ells)
 
         
         self.noise_matrix=self.clustering_noise_matrix+self.shear_noise_matrix
-        self.noise_matrix_interpolated=self.clustering_noise_matrix_interpolated+self.shear_noise_matrix_interpolated
 
         
         self.noise_matrix_nolensing=self.clustering_noise_matrix_nolensing
-        self.noise_matrix_nolensing_interpolated=self.clustering_noise_matrix_nolensing_interpolated
 
         
         if recompute:
-            self._dCldalpha()
+            self.compute_dCldfnl()
 
         self.interpolate_dcldalpha()
         
         
         self.Full_Covariance_matrix=self.Full_Cov_Matrix(self.covariance_matrix,self.noise_matrix)
         
-        self.Full_Covariance_matrix_interpolated=self.Full_Cov_Matrix(self.covariance_matrix_interpolated,self.noise_matrix_interpolated)
 
         
         
         self.Full_Covariance_matrix_nolensing=self.Full_Cov_Matrix(self.covariance_matrix_nolensing,self.noise_matrix_nolensing)
         
-        self.Full_Covariance_matrix_nolensing_interpolated=self.Full_Cov_Matrix(self.covariance_matrix_nolensing_interpolated,self.noise_matrix_nolensing_interpolated)
 
 
 
 
     def interpolate_covariancematrix(self):
         
-        
-        self.covariance_matrix_interpolated=np.zeros((self.covariance_matrix.shape[0],self.covariance_matrix.shape[1],len(self.all_ells)))
-        for i in range(0,self.covariance_matrix.shape[0]):
-            for j in range(0,self.covariance_matrix.shape[1]):
-                interp=interp1d(self.ls,self.covariance_matrix[i,j,:])
-                self.covariance_matrix_interpolated[i,j,:]=interp(self.all_ells)
-        
-        
-   
-        
-        
-        
-        
+        self.covariance_matrix=np.zeros((self.covariance_matrix_sparse.shape[0],self.covariance_matrix_sparse.shape[1],len(self.all_ells)))
+        for i in range(0,self.covariance_matrix_sparse.shape[0]):
+            for j in range(0,self.covariance_matrix_sparse.shape[1]):
+                interp=interp1d(self.ls,self.covariance_matrix_sparse[i,j,:])
+                self.covariance_matrix[i,j,:]=interp(self.all_ells)
    
 
     def covariance(self,ls,lensing=True):
@@ -192,23 +173,22 @@ class Fisher_forecast(object):
         
         
     
-    def _dCldalpha(self):
+    def compute_dCldfnl(self):
     
         print("getting dcldalpha")
-        self.dCldalpha=np.zeros((1+len(self.biases),self.covariance_matrix.shape[0],
-                            self.covariance_matrix.shape[1],
-                            self.covariance_matrix.shape[2]))   #first index is for the derivative (alpha-index)
+        self.dCldfnl_sparse=np.zeros((self.covariance_matrix_sparse.shape[0],
+                            self.covariance_matrix_sparse.shape[1],
+                            self.covariance_matrix_sparse.shape[2]))   #first index is for the derivative (alpha-index)
                                                                     #last index is for l's
                                                                     #should be symmetric on second, third indices
         
         
-        self.dCldalpha_no_lensing=np.zeros((1+len(self.biases),self.covariance_matrix_nolensing.shape[0],
-                                       self.covariance_matrix_nolensing.shape[1],
-                                       self.covariance_matrix_nolensing.shape[2])) 
+        self.dCldfnl_no_lensing_sparse=np.zeros((self.covariance_matrix_nolensing_sparse.shape[0],
+                                       self.covariance_matrix_nolensing_sparse.shape[1],
+                                       self.covariance_matrix_nolensing_sparse.shape[2])) 
         
-        self.dCldb()
         
-        self.dCldfnl()
+        self.dCldfnl_sparse()
         
         print("got dcldalpha")
 
@@ -217,23 +197,19 @@ class Fisher_forecast(object):
         
     def interpolate_dcldalpha(self):
         
-        self.dCldalpha_interpolated=np.zeros((1+len(self.biases),self.covariance_matrix_interpolated.shape[0],
-                            self.covariance_matrix_interpolated.shape[1],
-                            self.covariance_matrix_interpolated.shape[2])) 
+        self.dCldalpha=np.zeros((1+len(self.biases),self.covariance_matrix.shape[0],
+                            self.covariance_matrix.shape[1],
+                            self.covariance_matrix.shape[2])) 
         
-        self.dCldalpha_no_lensing_interpolated=np.zeros((1+len(self.biases),self.covariance_matrix_nolensing_interpolated.shape[0],
-                                       self.covariance_matrix_nolensing_interpolated.shape[1],
-                                       self.covariance_matrix_nolensing_interpolated.shape[2])) 
-        
-        self.dCldb_interpolated()
+        self.dCldb()
         
         self.dCldfnl_interpolated()
         
         
         
-        print("got dcldalpha")
        
         
+   
     def dCldb(self): #gets derivative wrt bias
  
         for i in range(0,self.lensing_bins): # which parameter we are differentiating against; 
@@ -242,7 +218,6 @@ class Fisher_forecast(object):
             self.dCldalpha[i+1,i,i]=2*self.covariance_matrix[i,i]/self.biases[i]  # this takes care of the top-right diagonal block of the
                                                                         # covariance matrix, C_l^gg, which depends on b^2
     
-            self.dCldalpha_no_lensing[i+1,i,i]=2*self.covariance_matrix_nolensing[i,i]/self.biases[i]
     
     
     
@@ -254,27 +229,6 @@ class Fisher_forecast(object):
                                                          # factor of b.
                 
                 self.dCldalpha[i+1,j,i]=self.covariance_matrix[i,j]/self.biases[i] #hopefuly takes care of the bottom-left block. 
-        
-    def dCldb_interpolated(self): #gets derivative wrt bias
- 
-        for i in range(0,self.lensing_bins): # which parameter we are differentiating against; 
-                             # dCldalpha[i:] is the derivative wrt the ith member of pi^alpha
-                
-            self.dCldalpha_interpolated[i+1,i,i]=2*self.covariance_matrix_interpolated[i,i]/self.biases[i]  # this takes care of the top-right diagonal block of the
-                                                                        # covariance matrix, C_l^gg, which depends on b^2
-    
-            self.dCldalpha_no_lensing_interpolated[i+1,i,i]=2*self.covariance_matrix_nolensing_interpolated[i,i]/self.biases[i]
-    
-    
-    
-    
-            for j in range(self.lensing_bins,self.dCldalpha.shape[1]):
-        
-                self.dCldalpha_interpolated[i+1,i,j]=self.covariance_matrix_interpolated[i,j]/self.biases[i] # this hopefully takes care of the top-right block
-                                                         # of the covariance matrix, C_l&g\kappa, which depends on one
-                                                         # factor of b.
-                
-                self.dCldalpha_interpolated[i+1,j,i]=self.covariance_matrix_interpolated[i,j]/self.biases[i] #hopefuly takes care of the bottom-left block. 
         
     
     
@@ -318,7 +272,7 @@ class Fisher_forecast(object):
 
     
     
-    def dCldfnl(self):
+    def dCldfnl_sparse(self):
         
         print("getting dcldfnl")
         
@@ -347,9 +301,9 @@ class Fisher_forecast(object):
             cut_off_ls=np.array(self.ls)[np.array(self.ls)<power_spectra.upperlimits[i]]
 
             cls_galgal_deriv=self.get_Cl_fnl_squared_deriv(cut_off_ls,[density_strings[i],density_strings[i]],power_spectra.Pnonlin)
-            self.dCldalpha[0,i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
+            self.dCldfnl_sparse[i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
     
-            self.dCldalpha_no_lensing[0,i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
+            self.dCldfnl_sparse[i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
             
         
 
@@ -366,12 +320,12 @@ class Fisher_forecast(object):
               #  print(i/len(density_strings),j/len(self.shears))
        
                 cls_galgal_deriv=self.get_Cl_fnl_deriv(cut_off_ls,[density_strings[i],shearstrings[j]],power_spectra.Pnonlin)
-                self.dCldalpha[0,i,j+self.lensing_bins,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
+                self.dCldfnl_sparse[i,j+self.lensing_bins,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
     
     def dCldfnl_interpolated(self):
         
         
-        dcldfnl=self.dCldalpha[0]
+        dcldfnl=self.dCldfnl_sparse
         
         dcldfnl_interpolated=np.zeros((dcldfnl.shape[0],dcldfnl.shape[1],len(self.all_ells)))
         
@@ -379,9 +333,8 @@ class Fisher_forecast(object):
             for j in range(0,dcldfnl.shape[1]):
                 interp=interp1d(self.ls,dcldfnl[i,j,:])
                 dcldfnl_interpolated[i,j,:]=interp(self.all_ells)
-        self.dCldalpha_interpolated[0]=dcldfnl_interpolated
+        self.dCldalpha[0]=dcldfnl_interpolated
         
-        self.dCldalpha_no_lensing_interpolated[0]=dcldfnl_interpolated[0:config.lensing_bins,0:config.lensing_bins,:]
         
     def size_of_covmatrix(self,ls,ell_index):
     
@@ -410,7 +363,7 @@ class Fisher_forecast(object):
         Fij_ells=np.zeros((1+self.lensing_bins,1+self.lensing_bins,len(ls)))
     
         for ell_index in range(0,len(ls)):
-        
+            sys.stdout.write(str(ell_index/ls[-1]*100)+"%\r")            
             N=self.size_of_covmatrix(ls,ell_index)  
         
             Cl=covariance[-N: , -N: , ell_index]  # deleting the first row and column if N=13,
@@ -585,8 +538,8 @@ class Fisher_forecast(object):
 
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix*noise_factor)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix*noise_factor,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
         
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
         
@@ -611,8 +564,8 @@ class Fisher_forecast(object):
 
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix,self.clustering_noise_matrix*noise_factor)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
     
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
 
@@ -637,8 +590,8 @@ class Fisher_forecast(object):
 
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix,self.all_ells)
     
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
 
@@ -666,8 +619,8 @@ class Fisher_forecast(object):
 
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix*noise_factor)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix*noise_factor,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
         
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
         
@@ -691,8 +644,8 @@ class Fisher_forecast(object):
 
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix,self.clustering_noise_matrix*noise_factor)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix*noise_factor,self.all_ells)
     
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
 
@@ -713,8 +666,8 @@ class Fisher_forecast(object):
        
 
         for i,noise_factor in enumerate(noise_factors):
-            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix)
-            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix)
+            fishermatrix=self.fisher_matrix(self.covariance_matrix,self.shear_noise_matrix*noise_factor,self.clustering_noise_matrix,self.all_ells)
+            fishermatrix_nolensing=self.fisher_matrix_nolensing_summing(self.covariance_matrix,self.clustering_noise_matrix,self.all_ells)
     
             sigmas[i,:]=[np.sqrt(np.linalg.inv(fishermatrix)[0,0]),np.sqrt(np.linalg.inv(fishermatrix_nolensing)[0,0])]
 
