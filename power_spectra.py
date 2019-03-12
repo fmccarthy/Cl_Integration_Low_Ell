@@ -7,7 +7,7 @@ import config
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
-
+import sys
 
 def redshift(chi):
     return results.redshift_at_comoving_radial_distance(chi)
@@ -173,7 +173,7 @@ def Wkgal_lensing(chi,i): # i is the ith redshift bin, starting at 0!!!
 '''
 Galaxy density efficiency kernel
 '''
-Zs=np.linspace(0.2,1,10000)
+Zs=np.linspace(0.2,1,1000)
 normalisation_factor_lenses=np.trapz(comoving_distance(Zs)**2/ results.hubble_parameter(Zs),Zs)
 
 def dnilensdz(z):
@@ -181,7 +181,7 @@ def dnilensdz(z):
     
     # is my normalisation factor okay?
     return nlens_total*comoving_distance(z)**2/ results.hubble_parameter(z)/normalisation_factor_lenses
-      
+
 
 def density_lenses_bini(i):
     if i>0 and i<1+config.lensing_bins:
@@ -253,6 +253,25 @@ def W(spec,chi):
         
 upperlimits=[2*np.pi*comoving_distance(minz)/10*H0/100 for minz in config.minzs]
     
+
+def get_Cls(ls,Ws1,Ws2,matter_pk,chis,zs):#specs tells you which power spectrum you want
+   
+    #ls is the l-values you will compute at
+    #Ws1 and Ws2 are the kernels you are integrating
+   
+    #zs=redshift(chis)
+    
+    Cls=[]
+    
+    for l in ls:
+        integrand=[Ws1[k]*Ws2[k]*matter_pk(zs[k],(l+1/2)/chis[k])/chis[k]**2 for k in range(0,len(chis))]
+        
+        Cls.append(np.trapz(integrand,chis))
+        
+    return np.array(Cls)
+
+#this was really inefficient, recomputing W N^2 times instead of N where N is bin size.
+'''
 def get_Cls(ls,specs,matter_pk):#specs tells you which power spectrum you want
     if specs==["CMB lensing","CMB lensing"]:
      #   chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(1100)),100)
@@ -260,7 +279,7 @@ def get_Cls(ls,specs,matter_pk):#specs tells you which power spectrum you want
          zs=[redshift(chi) for chi in chis]
     else:
        # chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(4)),50)
-        zs=np.linspace(0.01,4,100)
+        zs=np.linspace(0.01,4,1000)
         chis=comoving_distance(zs)
 
     #zs=redshift(chis)
@@ -270,12 +289,13 @@ def get_Cls(ls,specs,matter_pk):#specs tells you which power spectrum you want
     Cls=[]
     
     for l in ls:
+        print(l)
         integrand=[Ws[k]*matter_pk(zs[k],(l+1/2)/chis[k])for k in range(0,len(chis))]
         
         Cls.append(np.trapz(integrand,chis))
         
     return np.array(Cls)
-
+'''
 
 
 def get_Cl_fnl_squared_deriv(ls,specs,matter_pk):#specs tells you which power spectrum you want
@@ -387,13 +407,24 @@ Plin,Pnonlin=get_power_spectra(params)
 def shear_power_spectra(ls):
     shears=["shear_"+str(i)for i in range(0,config.source_bins)]
     shear_powerspectra=np.zeros((len(shears),len(shears),len(ls)))
+    
+    zs=np.linspace(0.01,4,1000)
+    chis=power_spectra.comoving_distance(zs)
+    
+    Ws=np.zeros((len(shears),len(zs)))
+    for i in range(0,len(shears)):
+
+        for j in range(0,len(zs)):
+            Ws[i,j]=W(shears[i],chis[j])
 
     for i in range(0,len(shears)):
-        print(i/len(shears)*100,"%")
+        Ws1=Ws[i]
+
         for j in range(0,len(shears)):
+            Ws2=Ws[j]
             if j>=i:
             
-                shear_powerspectra[i,j]=get_Cls(ls,[shears[i],shears[j]],Pnonlin)
+                shear_powerspectra[i,j]=get_Cls(ls,Ws1,Ws2,Pnonlin,chis,zs)
             else:
                     shear_powerspectra[i,j]=shear_powerspectra[j,i]
             
