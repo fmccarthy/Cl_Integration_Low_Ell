@@ -35,8 +35,8 @@ class Fisher_forecast(object):
         
         self.ls=ls
         
-        self.all_ells=range(ls[0],ls[-1])
-        #self.all_ells=ls
+       # self.all_ells=range(ls[0],ls[-1])
+        self.all_ells=ls
         
         if recompute:
             
@@ -239,7 +239,10 @@ class Fisher_forecast(object):
             Ks=(l+1/2)/chis
 
             integrand=[2*Ws1[k]*Ws2[k]/chis[k]**2*matter_pk(zs[k],Ks[k])/power_spectra.bg(zs[k])*1/Ks[k]**2*(power_spectra.bg(zs[k])-1)*self.factors[k,l_index]for k in range(0,len(chis))]
-        
+            plt.plot(chis,integrand,'o')
+            plt.show()
+            plt.loglog(chis,integrand,'o')
+            plt.show()
             Cls.append(np.trapz(integrand,chis))
         
         return np.array(Cls)
@@ -261,31 +264,41 @@ class Fisher_forecast(object):
     
     def _dCldfnl_sparse(self):
         
-        print("getting dcldfnl")
+        density_strings=["density_"+str(i)for i in range(1,self.lensing_bins+1)]
         
+        shearstrings=["shear_"+str(i)for i in range(0,self.source_bins)]
+        
+        print("getting dcldfnl")
+        '''
         zs=np.linspace(0.2,1,50)
         chis=power_spectra.comoving_distance(zs)
         self.ks=np.zeros((len(zs),len(self.ls)))
-        
-        
+        '''
+        '''
         
         self.factors=np.zeros((len(zs),len(self.ls)))
         for i in range(0,len(zs)):
             for j in range(0,len(self.ls)):
                 k=(self.ls[j]+1/2)/chis
                 self.factors[i,j]=power_spectra.factor(k[i],chis[i])        #i gives z index, j gives l index
-
-        density_strings=["density_"+str(i)for i in range(1,self.lensing_bins+1)]
-        
-        shearstrings=["shear_"+str(i)for i in range(0,self.source_bins)]
-
+        '''
         print("getting dcldfnl^2")
-
-        Ws_densities=np.zeros((len(density_strings),len(chis)))
+        
+        zres=400
+        Ws_densities=np.zeros((len(density_strings),zres))
         #b^2 derivs:
         for i in range(0,len(density_strings)):
+            zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+            chis=power_spectra.comoving_distance(zs)
+            self.factors=np.zeros((len(zs),len(self.ls)))
+            
+            for j in range(0,len(self.ls)):
+                for zz in range(0,len(zs)):
+                    k=(self.ls[j]+1/2)/chis[zz]
+                    self.factors[zz,j]=power_spectra.factor(k,chis[zz])        #i gives z index, j gives l index
+            print("done factors")
             for j in range(0,len(chis)):
-                
+                    
                 Ws_densities[i,j]=power_spectra.W(density_strings[i],chis[j])
 
      #       print(i/len(density_strings))
@@ -296,28 +309,46 @@ class Fisher_forecast(object):
     
             self.dCldfnl_sparse[i,i,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
             
-        
-
+         
         #b^1 derivs:
         print("getting dcldfnl^1")
-        Ws_shears=np.zeros((len(shearstrings),len(chis)))
-        for i in range(0,config.source_bins):
-            for j in range(0,len(chis)):
-                
-                Ws_shears[i,j]=power_spectra.W(shearstrings[i],chis[j])
+               
+        zres=200
+        Ws_densities=np.zeros((len(density_strings),zres))
 
-    
         for i in range(0,len(density_strings)):
-           # print(i)
+            print(i)
+            
+            zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+            chis=power_spectra.comoving_distance(zs)
+            for j in range(0,len(chis)):
+                    
+                Ws_densities[i,j]=power_spectra.W(density_strings[i],chis[j])
+            print("done densities")
             cut_off_ls=np.array(self.ls)[np.array(self.ls)<power_spectra.upperlimits[i]]
+            
+            factors=np.zeros((len(zs),len(self.ls)))
+            Ws_shears=np.zeros((len(shearstrings),len(chis)))
+            
+            for zz in range(0,len(zs)):
+                for ell in range(0,len(self.ls)):
+                    k=(self.ls[ell]+1/2)/chis[zz]
+                    factors[zz,ell]=power_spectra.factor(k,chis[zz])
+            print("done factors")
 
             for j in range(0,config.source_bins):
                # print(i,j)
               #  print(i/len(density_strings),j/len(self.shears))
-       
+                for zz in range(0,len(zs)):
+                    
+            
+                   
+                    Ws_shears[j,zz]=power_spectra.W(shearstrings[j],chis[zz])
+                print("done and wshears")
+
                 cls_galgal_deriv=self.get_Cl_fnl_deriv(cut_off_ls,Ws_densities[i],Ws_shears[j],power_spectra.Pnonlin,chis,zs)
-                self.dCldfnl_sparse[i,j+self.lensing_bins,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
-                self.dCldfnl_sparse[j+self.lensing_bins,i,0:len(cut_off_ls)]=cls_galgal_deriv
+                self.dCldfnl_sparse[i,j+config.lensing_bins,0:len(cut_off_ls)]=cls_galgal_deriv #putting in Fisher matrix
+                self.dCldfnl_sparse[j+config.lensing_bins,i,0:len(cut_off_ls)]=cls_galgal_deriv
     def dCldfnl_interpolated(self):
         
         
@@ -354,6 +385,8 @@ class Fisher_forecast(object):
             
             
     
+   
+        
     def fisher_matrix(self,covariance,lens_noise,clustering_noise,ls,discrete=True): #if discrete is false I will integrate over l instead of sum
     
         Fij_ells=np.zeros((1+self.lensing_bins,1+self.lensing_bins,len(ls)))

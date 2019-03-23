@@ -5,6 +5,9 @@ import camb
 import config
 
 from scipy.interpolate import interp1d
+from scipy import integrate
+from scipy import optimize
+
 import matplotlib.pyplot as plt
 
 import sys
@@ -111,11 +114,11 @@ def Wk(chi,chi_S):
 Galaxy lensing efficiency kernel:
 '''
 zmax=4
-Zs=np.linspace(0.01,zmax,10000)
+Zs=np.linspace(0.01,zmax,2000)
 alpha=1.27
 beta=1.02
 z0=0.5
-normalisation_factor_sources=np.trapz(Zs**alpha*np.exp(-(Zs/z0)**beta),Zs)
+normalisation_factor_sources=integrate.simps(Zs**alpha*np.exp(-(Zs/z0)**beta),Zs)
     
 
 def dnsource_dz(z): 
@@ -131,21 +134,18 @@ def number_of_sources_between_zs(z1,z2):
         zs=np.linspace(z2,z1,100)
     else:
         zs=np.linspace(z1,z2,100)
-    return np.trapz(dnsource_dz(zs),zs)
+    return integrate.simps(dnsource_dz(zs),zs)
 
 
 
-def make_redshift_boundaries(z0,zmax):
-    zs=np.linspace(z0,zmax,100000)
-    boundaries=[z0]
-    for z in zs:
-    #i could make this quicker by using a root-finder eg brentq rather than sampling at every z. would be nice to make this more 
-    #accurate by going to a finer z-space but as it is this would take too long. Come back to this if needed?
-        if number_of_sources_between_zs(z0,z)>2.6:
-            boundaries.append(z)
-            z0=z
-    boundaries.append(zmax)
+def equal_numberdensities_26(z2,z1):
     
+    
+    return number_of_sources_between_zs(min(z1,z2),max(z1,z2))-2.6
+def make_redshift_boundaries(z0,zmax):
+    boundaries=[z0]
+    for i in range(0,10):
+        boundaries.append(optimize.brentq(equal_numberdensities_26,boundaries[i]+0.01,zmax,boundaries[i]))
     return boundaries
 boundaries_sources=make_redshift_boundaries(0.01,4)
 #print("redshift bins for clustering are",boundaries_sources)
@@ -163,18 +163,18 @@ def Wkgal_lensing(chi,i): # i is the ith redshift bin, starting at 0!!!
         return 0
     
     if(z<zmin):
-        zsources=np.linspace(zmin,zmax,100)
+        zsources=np.linspace(zmin,zmax,10)
     else:
-        zsources=np.linspace(z,zmax,100)
+        zsources=np.linspace(z,zmax,10)
     integrand=[dnsource_dz(z)*Wk(chi,comoving_distance(z)) for z in zsources]
     
-    return 1/number_of_sources_between_zs(zmin,zmax) *np.trapz(integrand,zsources) #number of sources should be 2.6 by definition no?
+    return 1/number_of_sources_between_zs(zmin,zmax) *integrate.simps(integrand,zsources) #number of sources should be 2.6 by definition no?
    
 '''
 Galaxy density efficiency kernel
 '''
-Zs=np.linspace(0.2,1,1000)
-normalisation_factor_lenses=np.trapz(comoving_distance(Zs)**2/ results.hubble_parameter(Zs),Zs)
+Zs=np.linspace(0.2,1,100)
+normalisation_factor_lenses=integrate.simps(comoving_distance(Zs)**2/ results.hubble_parameter(Zs),Zs)
 
 def dnilensdz(z):
     nlens_total=0.25
@@ -191,7 +191,7 @@ def density_lenses_bini(i):
         zmin=minzs[i-1]
         zmax=maxzs[i-1]
         zs=np.linspace(zmin,zmax,100)
-        return np.trapz([dnilensdz(z)for z in zs],zs)
+        return integrate.simps([dnilensdz(z)for z in zs],zs)
     else:
         print("check density_lenses_bini argument; there is no bin", i)
         return 
@@ -299,7 +299,7 @@ def get_Cls(ls,specs,matter_pk):#specs tells you which power spectrum you want
 
 
 def get_Cl_fnl_squared_deriv(ls,specs,matter_pk):#specs tells you which power spectrum you want
-    
+    #i don't think this is used at all so i haven't checked for convergence
     #chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(4)),50)
     #zs=redshift(chis)
     zs=np.linspace(0.2,1,50)
@@ -319,7 +319,7 @@ def get_Cl_fnl_squared_deriv(ls,specs,matter_pk):#specs tells you which power sp
     return np.array(Cls)
 
 def get_Cl_fnl_deriv(ls,specs,matter_pk):#specs tells you which power spectrum you want
-    
+    #i don't think this is used at all so i haven't checked for convergence
     #chis=np.logspace(np.log10(comoving_distance(0.01)),np.log10(comoving_distance(4)),50)
     #zs=redshift(chis)
     zs=np.linspace(0.2,1,50)
@@ -344,6 +344,11 @@ def get_Cl_fnl_deriv(ls,specs,matter_pk):#specs tells you which power spectrum y
 def factor(k,chi):
     deltac= 1.42
     return 3*deltac*omegam*(H0/c)**2*(1/transferfunc2(k))*(1/growth(chi)) 
+
+def factor_wo_growth(k):
+    deltac= 1.42
+    return 3*deltac*omegam*(H0/c)**2*(1/transferfunc2(k))
+
 
 
 def clustering_noise(i):
@@ -408,17 +413,25 @@ def shear_power_spectra(ls):
     shears=["shear_"+str(i)for i in range(0,config.source_bins)]
     shear_powerspectra=np.zeros((len(shears),len(shears),len(ls)))
     
-    zs=np.linspace(0.01,4,100)
-    chis=comoving_distance(zs)
+    zres=200
     
-    Ws=np.zeros((len(shears),len(zs)))
+    Ws=np.zeros((len(shears),zres))
     for i in range(0,len(shears)):
+        print(i)
+        zs=np.linspace(0.01,boundaries_sources[i+1],zres)
+        chis=comoving_distance(zs)
 
         for j in range(0,len(zs)):
-            Ws[i,j]=W(shears[i],chis[j])
+          #  if j>=i:
+             #   print(i,j,power_spectra.boundaries_sources[i+1])
+               
+                Ws[i,j]=W(shears[i],chis[j])
 
     for i in range(0,len(shears)):
+        print(i)
         Ws1=Ws[i]
+        zs=np.linspace(0.01,boundaries_sources[i+1],zres)
+        chis=comoving_distance(zs)
 
         for j in range(0,len(shears)):
             Ws2=Ws[j]
@@ -436,16 +449,19 @@ def clustering_powerspectra(ls):
     
     density_strings=["density_"+str(i)for i in range(1,1+config.lensing_bins)]
     clustering_powerspectra=np.zeros((len(density_strings),len(ls)))
-    zs=np.linspace(0.01,4,100)
-    chis=comoving_distance(zs)
-    Ws=np.zeros((len(density_strings),len(zs)))
+    
+    zres=1600
+    Ws=np.zeros((len(density_strings),zres))
 
     for i in range(0,len(density_strings)):
-
+        zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+        chis=comoving_distance(zs)
         for j in range(0,len(zs)):
             Ws[i,j]=W(density_strings[i],chis[j])
             
     for i in range(0,len(density_strings)):
+        zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+        chis=comoving_distance(zs)
         Ws1=Ws[i]
         cut_off_ls=np.array(ls)[np.array(ls)<upperlimits[i]]
         clustering_powerspectra[i,0:len(cut_off_ls)]=get_Cls(cut_off_ls,Ws1,Ws1,Pnonlin,chis,zs)
@@ -453,34 +469,41 @@ def clustering_powerspectra(ls):
 
 
 
+
 def cross_powerspectra(ls):
     shears=["shear_"+str(i)for i in range(0,config.source_bins)]
     density_strings=["density_"+str(i)for i in range(1,config.lensing_bins+1)]
-    zs=np.linspace(0.01,4,100)
-    chis=comoving_distance(zs)
-    Wsclust=np.zeros((len(density_strings),len(zs)))
-    Wsshear=np.zeros((len(shears),len(zs)))
+    zres=200
+    Wsclust=np.zeros((len(density_strings),zres))
+    cross_powerspectra=np.zeros((len(density_strings),len(shears),len(ls)))
+
     for i in range(0,len(density_strings)):
+        print(i)
+        zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+        chis=comoving_distance(zs)
+        Wsshear=np.zeros((len(shears),len(zs)))
 
         for j in range(0,len(zs)):
             Wsclust[i,j]=W(density_strings[i],chis[j])
             
-    for i in range(0,len(shears)):
-
-        for j in range(0,len(zs)):
-            Wsshear[i,j]=W(shears[i],chis[j])
+        for k in range(0,len(shears)):
+           # print(k)
+            for j in range(0,len(zs)):
+                Wsshear[k,j]=W(shears[k],chis[j])
             
             
-    cross_powerspectra=np.zeros((len(density_strings),len(shears),len(ls)))
-
-    for i in range(0,len(density_strings)):
+       # print("out")
+#    for i in range(0,len(density_strings)):
         cut_off_ls=np.array(ls)[np.array(ls)<upperlimits[i]]
         Ws1=Wsclust[i]
+        zs=np.linspace(config.minzs[i],config.maxzs[i],zres)
+        chis=comoving_distance(zs)
         for j in range(0,len(shears)):
             Ws2=Wsshear[j]
             cross_powerspectra[i,j,0:len(cut_off_ls)]=get_Cls(cut_off_ls,Ws1,Ws2,Pnonlin,chis,zs)
             
     return cross_powerspectra
+
 
 
 def Cls(ls):
