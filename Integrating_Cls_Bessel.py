@@ -77,10 +77,14 @@ def logf_transform(function,x,Nmax,xmin,xmax,bias):
 def hypf(a,b,c,d):
     return mpmath.hyp2f1(a,b,c,d)
 
+def complex_hypf(a,b,c,d):
+    return complex(mpmath.hyp2f1(a,b,c,d))
+
 def hypfnearone(ell,nu,t):
     ##equatino B5 of 1705.05022 as equation b6 did not work for me
      ttilde=-(1-t**2)**2/(4*t**2)
-     return special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
+     mp_array=np.frompyfunc(complex_hypf,4,1)
+     return special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*mp_array((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*mp_array((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
 
 
 '''
@@ -122,30 +126,26 @@ def i_ell(ell,nus,ts):
     
     return answer
 
+
 def i_ellnew2(ell,nus,ts):
     
-    #would like this to take in an ARRAY of ts and return some array
     
     answer=np.zeros((len(ts),len(nus)),dtype=np.complex_)
     hypfs=np.zeros((len(ts),len(nus)),dtype=np.complex_)
     tstar=0.7
-    
-    
-    for i,t in enumerate(ts):
-        
-        #would be good to get hypf working for arrays?
-        if t<tstar:
-            for j,nu in enumerate(nus):
-                hypfs[i,j]=hypf((nus[j]-1)/2,ell+nus[j]/2,ell+3/2,t**2)
-        else:
-            for j,nu in enumerate(nus):
-                hypfs[i,j]=hypfnearone(ell,nus[j],t)
-    
+    t1=time.time()
+    print("starting tloop")
+    mp_array=np.frompyfunc(complex_hypf,4,1)
+    hypfs[ts<tstar,:]=mp_array((nus-1)/2,ell+nus/2,ell+3/2,ts[ts<tstar,np.newaxis]**2)
+    print("found first in",time.time()-t1)
+    t1=time.time()
+    hypfs[ts>tstar,:]=hypfnearone(ell,nus,ts[ts>tstar,np.newaxis])
+    print("found second in",time.time()-t1)
+
     answer[ts<tstar]= 2**(nus-1)*np.pi**2*special.gamma(ell+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2))* hypfs[ts<tstar]*ts[ts<tstar,np.newaxis]**ell
     answer[ts>tstar]=2**(nus-1)*np.pi**2*special.gamma(ell+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2))*hypfs[ts>tstar]*ts[ts>tstar,np.newaxis]**ell
     
     return answer
-
 
 
 
@@ -459,68 +459,55 @@ def Min_T(ell,nu):
  
 
 
-def intIW(ell,nus,tresolution,chiresolution,SPECTRUM,experiment):
+def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
     #clgnu in the mathematica nb
 
-    answer=np.zeros(len(nus),dtype=np.complex_)
-
-  
-    if(ell<11):
-        mint=1e-5
-        ts=np.linspace(mint,1-mint,tresolution)#some sampling near 0
+    answer=np.zeros((len(ells),len(nus)),dtype=np.complex_)
     
-      
-        fact1=intWgalaxynew2(ell,nus,ts,chiresolution,SPECTRUM,experiment)#txnushaped array
-       # print("fact1",fact1[:,0])
-
-        fact2=i_ellnew2(ell,nus,ts) #txnu shaped array
-      #  print("fact2",fact2[:,0])
-
-        integrand=fact1*fact2 #fact1 and fact2 should be t-times nu shaped arrays
-
-
-        for i in range(0,len(answer)):
-            answer[i]= integrate.simps(integrand[:,i],ts) #this should be a nu-shaped array
-       
-        
-       # print("integrand",integrand[:,0])
-
-        return answer #reminder, answer has to be a nu-shaped array.
-    else:
-        mints=interpolated_minT(ell,nus)
-        
-        if mints.any()>(1-1e-5):
-            print("t problem",mints[mints>1-1e-5])
+    for ell_index, ell in enumerate(ells):
+        t1=time.time()
+        if(ell<11):
+            mint=1e-5
+            ts=np.linspace(mint,1-mint,tresolution)#some sampling near 0
+             
             
-        for i in range(0,len(nus)):
-            mint=mints[i]
-            ts=np.linspace(mint,1-1e-5,tresolution)
+            tnow=time.time()
+            print("finding intwgalaxynew2")
+            fact1=intWgalaxynew2(ell,nus,ts,chiresolution,SPECTRUM,experiment)#txnushaped array
+            print("found in",time.time()-tnow,"seconds")
+            tnow=time.time()
+            print("finding iellnew")
+
+            fact2=i_ellnew2(ell,nus,ts) #txnu shaped array
+            print("found in",time.time()-tnow,"seconds")
+            tnow=time.time()
+
+            integrand=fact1*fact2 
+
+
+            for i in range(0,len(nus)):
+                answer[ell_index,i]= integrate.simps(integrand[:,i],ts) #this should be a nu-shaped array
+       
+            print("done in",time.time()-tnow,"seconds")
+
+        else:
+            mints=interpolated_minT(ell,nus)
+        
+            if np.max(mints)>(1-1e-5):
+                print("t problem",mints[mints>1-1e-5])
+            
+            for i in range(0,len(nus)):
+                mint=mints[i]
+                ts=np.linspace(mint,1-1e-5,tresolution)
    
-            fact1=intWgalaxynew(ell,nus[i],ts,chiresolution,SPECTRUM,experiment)
-            fact2=i_ellnew(ell,nus[i],ts) 
+                fact1=intWgalaxynew(ell,nus[i],ts,chiresolution,SPECTRUM,experiment)
+                fact2=i_ellnew(ell,nus[i],ts) 
       
-            integrand=fact1*fact2
+                integrand=fact1*fact2
 
-            answer[i]= integrate.simps(integrand,ts)
-        return answer
-'''
-ks_read=[]
-pks_read=[]
-ps=open("PCAMBz0.txt",'r')
-lines=ps.readlines()
-for i in lines:
-    k=i.split()[0]
-    #print(float(k.split('E')[0]))
-    k=float(k.split('E')[0])*10**float(k.split('E')[1])
-    pk=i.split()[1]
-  #  print(pk)
-    pk=float(pk.split('E')[0])*10**float(pk.split('E')[1])
-    ks_read.append(k)
-    pks_read.append(pk)
-    
-ps.close()
-
-'''
+                answer[ell_index,i]= integrate.simps(integrand,ts)
+        print(ell," done in" , time.time()-t1)
+    return answer
 
 
 
@@ -650,16 +637,17 @@ def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment):
     
     cns,fns=coeffs(to_transform,Nmax,kmin,kmax,bias)
     
-    answer=[]
-    for ell in ells:
-       # print(cns[0:10])
-        print(ell)
+    
+    #the cns are ell-independent.
+    #would be nice to have intIW return an ell x nu shapped array so that we can do this all together. 
+    #at the moment it returns a nu-shaped array.
+    
+ 
+    xx=intIW(ells,fns,tresolution,chiresolution,SPECTRUM,experiment)
        # print(intIW(ell,fns[0:10],tresolution,chiresolution,SPECTRUM,experiment))
-        ans=np.sum(cns*intIW(ell,fns,tresolution,chiresolution,SPECTRUM,experiment))/(2*np.pi**2)
-        answer.append(ans)
-   # print(answer,"in ",time.time()-t1,"seconds")
+    ans=np.sum(cns*xx,axis=1)/(2*np.pi**2)
 
-    return ([ans.real for ans in answer])
+    return (ans.real)
 
 '''
 def limbercl(ell,chiresolution,spec):
