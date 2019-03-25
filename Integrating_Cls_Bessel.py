@@ -127,23 +127,28 @@ def i_ell(ell,nus,ts):
     return answer
 
 
+
 def i_ellnew2(ell,nus,ts):
     
+    #would like this to take in an ARRAY of ts and return some array ell x t x nu shape
     
-    answer=np.zeros((len(ts),len(nus)),dtype=np.complex_)
-    hypfs=np.zeros((len(ts),len(nus)),dtype=np.complex_)
+    answer=np.zeros((len(ell),len(ts),len(nus)),dtype=np.complex_)
+    hypfs=np.zeros((len(ell),len(ts),len(nus)),dtype=np.complex_)
     tstar=0.7
     t1=time.time()
     print("starting tloop")
     mp_array=np.frompyfunc(complex_hypf,4,1)
-    hypfs[ts<tstar,:]=mp_array((nus-1)/2,ell+nus/2,ell+3/2,ts[ts<tstar,np.newaxis]**2)
+    
+    hypfs[:,ts<tstar,:]=mp_array((nus-1)/2,ell[:,np.newaxis,np.newaxis]+nus/2,ell[:,np.newaxis,np.newaxis]+3/2,ts[ts<tstar,np.newaxis]**2)
+    
+    
     print("found first in",time.time()-t1)
     t1=time.time()
-    hypfs[ts>tstar,:]=hypfnearone(ell,nus,ts[ts>tstar,np.newaxis])
-    print("found second in",time.time()-t1)
-
-    answer[ts<tstar]= 2**(nus-1)*np.pi**2*special.gamma(ell+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2))* hypfs[ts<tstar]*ts[ts<tstar,np.newaxis]**ell
-    answer[ts>tstar]=2**(nus-1)*np.pi**2*special.gamma(ell+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2))*hypfs[ts>tstar]*ts[ts>tstar,np.newaxis]**ell
+    hypfs[:,ts>tstar,:]=hypfnearone(ell[:,np.newaxis,np.newaxis],nus,ts[ts>tstar,np.newaxis])
+    
+    answer[:,ts<tstar,:]= 2**(nus-1)*np.pi**2*special.gamma(ell[:,np.newaxis,np.newaxis]+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2)[:,np.newaxis,np.newaxis])* hypfs[:,ts<tstar,:]*ts[ts<tstar,np.newaxis]**ell[:,np.newaxis,np.newaxis]
+    
+    answer[:,ts>tstar,:]=2**(nus-1)*np.pi**2*special.gamma(ell[:,np.newaxis,np.newaxis]+nus/2)/(special.gamma((3-nus)/2)*special.gamma(ell+3/2)[:,np.newaxis,np.newaxis])*hypfs[:,ts>tstar,:]*ts[ts>tstar,np.newaxis]**ell[:,np.newaxis,np.newaxis]
     
     return answer
 
@@ -304,43 +309,36 @@ def Dl_wg(chi,ell,FIELD,experiment):
 
 
 
-def intWgalaxynew2(ell,nus,ts,chiresolution,SPECTRUM,experiment):
-   # print("spec is",SPECTRUM)
+def intWgalaxynew2(ells,nus,ts,chiresolution,SPECTRUM,experiment):
+    answer=np.zeros((len(ells),len(ts),len(nus)),dtype=np.complex_)
     FIELD1=SPECTRUM[0]
     FIELD2=SPECTRUM[1]
-    
-    #now i would like this to work for an array of nus as well as ts.
-    
-    answer=np.zeros((len(ts),len(nus)),dtype=np.complex_)
-    #i would like this to take in an array of ts and give me back some array with one element for every t.
-    
-    ##MAKE BOUNDARIES
     chimin=cosmo_functions.comoving_distance(0.2)
     chimax=cosmo_functions.comoving_distance(0.4)
     chis=np.linspace(chimin,chimax,chiresolution)
-   # print("chis",chis)
     t_independen_multiplicitave_factor=chis[:,np.newaxis]**(1-nus)#returns chi times nu array
-                                                                                                                                         #would like a chi-times-nu-times-t shaped array
-  #  print("tin",t_independen_multiplicitave_factor)
-    first=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)) #chi times t
     
-#    print("first",first)
-    second=Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment)#chi times t
-#    print("second",second)
-                                                                                                                      #would like a chi-times-nu-times-t shaped array
-    secondmultipliedbytfactor=ts[np.newaxis,:,np.newaxis]**(nus-2)*second[:,:,np.newaxis]#chi times t times nu
+
+    for ell_index,ell in enumerate (ells):
+  
     
-    firstplussecond=first[:,:,np.newaxis]+secondmultipliedbytfactor #chi times t times nu
+        first=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)) #chi times t
     
-    total=(Dl_wg(chis,ell,FIELD1,experiment)[:,np.newaxis,np.newaxis])*firstplussecond #chi times t times nu
+        second=Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment)#chi times t
+        
+        secondmultipliedbytfactor=ts[np.newaxis,:,np.newaxis]**(nus-2)*second[:,:,np.newaxis]#chi times t times nu
+                                                                                                 #would like a chi-times-nu-times-t shaped array
+    
+        firstplussecond=first[:,:,np.newaxis]+secondmultipliedbytfactor #chi times t times nu
+    
+        total=(Dl_wg(chis,ell,FIELD1,experiment)[:,np.newaxis,np.newaxis])*firstplussecond #chi times t times nu
      
-    total_integrand=t_independen_multiplicitave_factor[:,np.newaxis,:]*total #chi times t times nu
-   # print(total_integrand.shape)
-    for i in range(0,len(ts)):
-        for j in range(0,len(nus)):
-            answer[i,j]=integrate.simps(total_integrand[:,i,j],chis)
-  #  print("answer",answer)
-    return answer #a t -times nu shaped array.
+        total_integrand=t_independen_multiplicitave_factor[:,np.newaxis,:]*total #chi times t times nu
+                    
+        answer[ell_index]=integrate.simps(total_integrand,chis,axis=0)
+   
+    return answer #a ellxt -times nu shaped array.
+
 
 def intWgalaxynew(ell,nu,ts,chiresolution,SPECTRUM,experiment):
     
@@ -464,33 +462,31 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
 
     answer=np.zeros((len(ells),len(nus)),dtype=np.complex_)
     
-    for ell_index, ell in enumerate(ells):
-        t1=time.time()
-        if(ell<11):
-            mint=1e-5
-            ts=np.linspace(mint,1-mint,tresolution)#some sampling near 0
-             
+    mint=1e-5
+    
+    ts=np.linspace(mint,1-mint,tresolution)#some sampling near 0
+    tnow=time.time()
+
+    fact2lessthan10=i_ellnew2(ells[ells<11],nus,ts) #txnu shaped array
+    print("found fact2 in ",time.time()-tnow)
+    tnow=time.time()
+    fact1=intWgalaxynew2(ells[ells<11],nus,ts,chiresolution,SPECTRUM,experiment)#ellxtxnushaped array
+    print("found in",time.time()-tnow,"seconds")
+    # print("fact1",fact1[:,0])
+    tnow=time.time()
+    
             
-            tnow=time.time()
-            print("finding intwgalaxynew2")
-            fact1=intWgalaxynew2(ell,nus,ts,chiresolution,SPECTRUM,experiment)#txnushaped array
-            print("found in",time.time()-tnow,"seconds")
-            tnow=time.time()
-            print("finding iellnew")
-
-            fact2=i_ellnew2(ell,nus,ts) #txnu shaped array
-            print("found in",time.time()-tnow,"seconds")
-            tnow=time.time()
-
-            integrand=fact1*fact2 
-
-
-            for i in range(0,len(nus)):
-                answer[ell_index,i]= integrate.simps(integrand[:,i],ts) #this should be a nu-shaped array
        
-            print("done in",time.time()-tnow,"seconds")
+    integrand=fact1*fact2lessthan10 
+    answer[ells<11,:]= integrate.simps(integrand,ts,axis=1) 
 
-        else:
+
+           
+    print("done in",time.time()-tnow,"seconds")
+
+    for ell_index, ell in enumerate(ells): 
+        if ell>11:
+        
             mints=interpolated_minT(ell,nus)
         
             if np.max(mints)>(1-1e-5):
@@ -504,10 +500,15 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
                 fact2=i_ellnew(ell,nus[i],ts) 
       
                 integrand=fact1*fact2
-
+              #  print(integrand.shape)
+               
                 answer[ell_index,i]= integrate.simps(integrand,ts)
-        print(ell," done in" , time.time()-t1)
+               # print(answer[ell_index,i])
+            
+           
     return answer
+
+
 
 
 
