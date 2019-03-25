@@ -24,7 +24,7 @@ from scipy import integrate
 from scipy import optimize
 from scipy import special
 
-import mpmath
+#import mpmath
 
 import cosmo_functions
 
@@ -74,24 +74,46 @@ def logf_transform(function,x,Nmax,xmin,xmax,bias):
    # print(cns/(np.sqrt(xmin*xmax))**(fns),fns)
     return np.sum([cns[i]*((x/1))**(fns[i]) for i in range(0,len(cns))])
 
-def hypf(a,b,c,d):
-    return mpmath.hyp2f1(a,b,c,d)
+#def hypf(a,b,c,d):
+ #   return mpmath.hyp2f1(a,b,c,d)
 
+def hypf(a,b,c,z):
+    term=1
+    epsilon=1
+    answer=0
+    n=0
+    while(np.max(epsilon)>1e-10):
+        previousanswer=answer
+        answer=answer+term #starts at 1
+        term=term*(a+n)*(b+n)/((c+n)*(n+1))*z #for the NE
+        
+        epsilon=np.abs((answer-previousanswer)/answer)
+    
+        n=n+1
+    return answer
+    
+'''
 def complex_hypf(a,b,c,d):
     return complex(mpmath.hyp2f1(a,b,c,d))
-
+'''
+'''
 def hypfnearone(ell,nu,t):
     ##equatino B5 of 1705.05022 as equation b6 did not work for me
      ttilde=-(1-t**2)**2/(4*t**2)
      mp_array=np.frompyfunc(complex_hypf,4,1)
      return special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*mp_array((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*mp_array((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
+'''
+def hypfnearone(ell,nu,t):
+    ##equatino B5 of 1705.05022 as equation b6 did not work for me
+     ttilde=-(1-t**2)**2/(4*t**2)
+     return special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
 
 
 '''
 would like to turn the bottom three into one function.
 
 '''
-    
+''' 
 def i_ell_floats(ell,nu,t):
     
     #would like this to take in an ARRAY of ts
@@ -102,6 +124,18 @@ def i_ell_floats(ell,nu,t):
        
         return 2**(nu-1)*np.pi**2*special.gamma(ell+nu/2)/(special.gamma((3-nu)/2)*special.gamma(ell+3/2))*t**ell*hypfnearone(ell,nu,t)
 
+'''
+def i_ell_floats(ell,nu,t):
+    
+    #would like this to take in an ARRAY of ts
+    tstar=0.7
+    if t<tstar:
+        return 2**(nu-1)*np.pi**2*special.gamma(ell+nu/2)/(special.gamma((3-nu)/2)*special.gamma(ell+3/2))*t**ell* hypf((nu-1)/2,ell+nu/2,ell+3/2,t**2)
+    else:
+       
+        return 2**(nu-1)*np.pi**2*special.gamma(ell+nu/2)/(special.gamma((3-nu)/2)*special.gamma(ell+3/2))*t**ell*hypfnearone(ell,nu,t)
+
+'''
 def i_ell(ell,nus,ts):
     
     #would like this to take in an ARRAY of ts and return some array
@@ -126,7 +160,7 @@ def i_ell(ell,nus,ts):
     
     return answer
 
-
+'''
 
 def i_ellnew2(ell,nus,ts):
     
@@ -137,9 +171,9 @@ def i_ellnew2(ell,nus,ts):
     tstar=0.7
     t1=time.time()
     print("starting tloop")
-    mp_array=np.frompyfunc(complex_hypf,4,1)
+  #  mp_array=np.frompyfunc(complex_hypf,4,1)
     
-    hypfs[:,ts<tstar,:]=mp_array((nus-1)/2,ell[:,np.newaxis,np.newaxis]+nus/2,ell[:,np.newaxis,np.newaxis]+3/2,ts[ts<tstar,np.newaxis]**2)
+    hypfs[:,ts<tstar,:]=hypf((nus-1)/2,ell[:,np.newaxis,np.newaxis]+nus/2,ell[:,np.newaxis,np.newaxis]+3/2,ts[ts<tstar,np.newaxis]**2)
     
     
     print("found first in",time.time()-t1)
@@ -436,6 +470,10 @@ def intWgalaxy(ell,nus,ts,chiresolution,SPECTRUM,experiment):
 def zerot(t,ell,nu):
   #  return t+ell+nu-9
     return np.abs(i_ell_floats(ell,nu,t))-np.abs(i_ell_floats(ell,nu,0.999999999999999)*1e-5)
+
+def zerot5(t,ell,nu):
+  #  return t+ell+nu-9
+    return np.abs(i_ell_floats(ell,nu,t))-np.abs(i_ell_floats(ell,nu,0.999999999999999)*5e-5)
 def Min_T(ell,nu):
     if(np.abs(i_ell_floats(ell,nu,0.6999))>np.abs(i_ell_floats(ell,nu,0.999999999999999)*1e-5)):
        # print("in")
@@ -450,7 +488,7 @@ def Min_T(ell,nu):
                 return optimize.brentq(zerot,t,0.98,args=(ell,nu))
         for t in ts:
             if np.abs(i_ell_floats(ell,nu,t))<np.abs(i_ell_floats(ell,nu,0.999999999999999)*5e-5):
-                return optimize.brentq(zerot,t,0.98,args=(ell,nu))
+                return optimize.brentq(zerot5,t,0.98,args=(ell,nu))
         print("t problem")
         return None
 
@@ -566,6 +604,7 @@ for i,ell in enumerate(ls):
 jj=interp2d([nu.imag for nu in nus],np.array(ls),mints)  
 
 def interpolated_minT(ell,nu):
+    #print("going",nu.imag,ell)
     return jj(nu.imag,ell)                     
                                                
 
