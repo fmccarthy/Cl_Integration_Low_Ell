@@ -297,7 +297,7 @@ def intIW(ell,nus,chi1av,sigmax1,chi2av,sigmax2,tresolution,chiresolution):
       
         fact1=intWgalaxy(ell,nus,chi1av,sigmax1,chi2av,sigmax2,ts,chiresolution)#txnushaped array
             
-        fact2=i_ellnew(ell,nus,ts) #txnu shaped array
+        fact2=i_ell(ell,nus,ts) #txnu shaped array
 
         integrand=fact1*fact2 #fact1 and fact2 should be t-times nu shaped arrays
             #print(integrand)
