@@ -301,7 +301,7 @@ def intIW(ell,nus,chi1av,sigmax1,chi2av,sigmax2,tresolution,chiresolution):
 
         integrand=fact1*fact2 #fact1 and fact2 should be t-times nu shaped arrays
             #print(integrand)
-        print(integrand.shape)
+      #  print(integrand.shape)
         for i in range(0,len(answer)):
            # print(integrand[i].shape)
             answer[i]= integrate.simps(integrand[:,i],ts) #this should be a nu-shaped array
@@ -314,9 +314,9 @@ def intIW(ell,nus,chi1av,sigmax1,chi2av,sigmax2,tresolution,chiresolution):
         for i in range(0,len(nus)):
             mint=mints[i]
             ts=np.linspace(mint,1-1e-5,tresolution)
-   
+          #  print("about")
             fact1=intWgalaxynew(ell,nus[i],chi1av,sigmax1,chi2av,sigmax2,ts,chiresolution)
-            fact2=i_ell(ell,nus[i],ts) 
+            fact2=i_ellnew(ell,nus[i],ts) 
       
             integrand=fact1*fact2
 
@@ -416,7 +416,7 @@ def Pk(k,kh=False,Ph=False,linear=True):
         
     
 def to_transform(k):
-    return 1/(k)*Pk(k)*np.exp(-((k)/10)**2)#Pk(k,True,True)*np.exp(-((k)/10)**2)
+    return 1/(k)*Pk(k,True,True)*np.exp(-((k)/10)**2)#Pk(k)*np.exp(-((k)/10)**2)#Pk(k,True,True)*np.exp(-((k)/10)**2)
 
 
 cns,fns=coeffs(to_transform,200,1e-8,52,1.9)
@@ -450,6 +450,7 @@ def clg(ell,chi1av,sigmax1,chi2av,sigmax2,tresolution,chiresolution,maxfreq):
     
     cns,fns=coeffs(to_transform,Nmax,kmin,kmax,bias)
     answer=np.sum(cns*intIW(ell,fns,chi1av,sigmax1,chi2av,sigmax2,tresolution,chiresolution))/(2*np.pi**2)
+    print(cns[0:10],fns[0:10])
     print(answer,"in ",time.time()-t1,"seconds")
 
     return (answer)
@@ -462,6 +463,16 @@ def limbercl(ell,chi1av,sigmax1,chi2av,sigmax2,chiresolution):
     chis=np.linspace(chimin,chimax,chiresolution)
     
     integrand=[1/chi**2*(Wg(chi,sigmax1,chi1av)*Wg(chi,sigmax2,chi2av))*Pk((ell+1/2)/chi,True,True) for chi in chis]
+    #print("itnegrand plot")
+#    plt.show()
+ #   plt.plot(chis,integrand)
+#    #plt.plot(chis,[(Wg(chi,sigmax1,chi1av))for chi in chis])
+    #print("w plot")
+    #plt.show()
+    #print(integrand)
+    #print([[chis[i],Pk((ell+1/2)/chis[i],True,True)] for i in range(0,len(chis))])
+   # plt.plot(chis,[Pk((ell+1/2)/chi,True,True)for chi in chis])
+   # plt.show()
     return integrate.simps(integrand,chis)#,chis,integrand
     
 def coeffs2(function,Nmax,kmin,kmax,bias):

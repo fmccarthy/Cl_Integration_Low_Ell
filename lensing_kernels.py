@@ -230,7 +230,7 @@ def Wgali_clustering2(chis,i,spec,nbins):
    # print(zs,zmin,zmax)
     return answer
 
-def Wgali_clustering(chis,i,spec):
+def Wgali_clustering(chis,i,spec,nbins):
     
     
     '''
@@ -244,31 +244,31 @@ def Wgali_clustering(chis,i,spec):
         
         return 0
     '''
-  #  redshift_bin=i-1
+    redshift_bin=i-1
  #   #print("in wgali redshift bin is",i-1)
  #   print("spec is",spec)
 #    #print("number of bins is",nbins)
 #    
-   # z_bin_boundaries=bin_boundaries(nbins)
-   # zmin=z_bin_boundaries[redshift_bin]
+    z_bin_boundaries=bin_boundaries(nbins)
+    zmin=z_bin_boundaries[redshift_bin]
   #  print(z_bin_boundaries)
    # print(redshift_bin,zmin)
     
-    #zmax=z_bin_boundaries[redshift_bin+1]
+    zmax=z_bin_boundaries[redshift_bin+1]
     
-#    answer=np.zeros(len(chis))
+    answer=np.zeros(len(chis))
     
     zs=cosmo_functions.redshift(chis)
   #  print(zs)
    # print(spec)
     answer= dnilensdz(zs,spec)*cosmo_functions.dzdchi(zs) #note WITHOUT bias and WITHOUT normalisation factor of 1/density
       
-  #  answer[zs<zmin]=0
- #   answer[zs>zmax]=0
+    answer[zs<zmin]=0
+    answer[zs>zmax]=0
    # print(zs,zmin,zmax)
    
     return answer
-def W(spec,chis,experiment=None):
+def W(spec,chis,nbins,experiment=None):
     
     
     
@@ -282,7 +282,7 @@ def W(spec,chis,experiment=None):
     if spec[0:7]=="density":
         i=int(spec[8:])
         #return np.array([Wgali_clustering(chi,i,experiment)for chi in chis])
-        return Wgali_clustering(chis,i,experiment)
+        return Wgali_clustering(chis,i,experiment,nbins)
     else:
         print("spec problem")
         
