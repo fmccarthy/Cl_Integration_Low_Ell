@@ -15,7 +15,7 @@ Created on Thu Mar 14 19:15:25 2019
 """
 
 import numpy as np
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 
@@ -27,6 +27,7 @@ import time
 import cosmo_functions
 import lensing_kernels
 
+test=False
 
 #cosmological parameters
 H0=cosmo_functions.H0
@@ -35,7 +36,7 @@ omegam=cosmo_functions.omegam
 
 
 
-def coeffs(function,Nmax,kmin,kmax,bias):
+def coeffs(function,Nmax,kmin,kmax,bias,test=False):
     
     #freturns ourier transform coefficients and frequencies
     #parameters: function = function that will be transformed 
@@ -54,7 +55,7 @@ def coeffs(function,Nmax,kmin,kmax,bias):
     ints=np.linspace(-int(Nmax/2),int(Nmax/2),Nmax+1-Nmax%2)
 
     period=kappamax-kappamin
-    
+    #print(bias)
     kappas=kappamin+np.linspace(0,period,Nmax+1-Nmax%2)
     samples=function(np.exp(kappas))*(np.exp(kappas)/np.sqrt(kmin*kmax))**bias #sampling the function at each k
       
@@ -69,7 +70,7 @@ def coeffs(function,Nmax,kmin,kmax,bias):
         cns[-1]=cns[-1]/2
     return cns,fns
 
-def logf_transform(function,x,Nmax,xmin,xmax,bias):
+def logf_transform(function,x,Nmax,xmin,xmax,bias,test=False):
     #makes the log fourier series
     #parmeters: function = function that will be transformed
     #           x = value evaluating the function f(x)
@@ -78,7 +79,7 @@ def logf_transform(function,x,Nmax,xmin,xmax,bias):
     #           xmax = maximum x value (function is periodic in log x with this period)
     #           bias = bias to transform with
     
-    cns,fns=coeffs(function,Nmax,xmin,xmax,bias)
+    cns,fns=coeffs(function,Nmax,xmin,xmax,bias,test)
    # print(cns/(np.sqrt(xmin*xmax))**(fns),fns)
     return np.sum([cns[i]*((x/1))**(fns[i]) for i in range(0,len(cns))])
 
@@ -88,8 +89,8 @@ def hypf(a,b,c,z):
     #hypergeometric function defined through its power series representation
     
     #note this is not a good idea to use for abs(z) near 1, it will take a long time to converge.
-    
-    if np.max(z)>0.8:
+   # print(np.max(z))
+    if np.max(z)>0.7:
         print("check you are using the correct hypergeometric function! hypfnearone should be used for z near 1. will take a while to compute for z=",z[z>0.8])
     
     term=1
@@ -111,9 +112,15 @@ def hypfnearone(ell,nu,t):
     ##equation B5 of 1705.05022 as equation b6 did not work for me
     
      ttilde=-(1-t**2)**2/(4*t**2)
-     return special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
-
-
+    # print(hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
+    # print(hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde))
+    # print(t**(-ell-nu/2))
+     
+     xx=special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
+   
+     #print(xx)
+     return xx
+     
 
 def i_ell_floats(ell,nu,t):
     
@@ -208,10 +215,9 @@ def N_fields(clustering_bins):
 def bin_boundaries(clustering_bins):
     return np.linspace(0.2,1,clustering_bins+1)
 
-
-def Wg(chis, FIELD,number_of_clustering_bins,experiment="magic"):
+def Wg(chis, FIELD,number_of_clustering_bins,experiment="magic",test=False):
     #where we compute the window function 
-    
+   # print(test)
     #parameters: chis = comoving distance array to evaluate at
     
     #           FIELD = A LIST ["TYPE",BIN_NUMBER]
@@ -220,6 +226,15 @@ def Wg(chis, FIELD,number_of_clustering_bins,experiment="magic"):
     #           experiment = "magic" or "LSST" depending on how dense the galaxies are    
     
     #remember the power spectrum we transform is P(z=0,k) so we must multiply any Wg by the growth factor normalized to 1 at z=0!!
+    
+    
+    if test:
+        sigma=300
+        chiav=3000
+        Wg=np.zeros(len(chis))
+        Wg[chis<8000]= 1/(np.sqrt(2*np.pi)*sigma)*np.exp(-(chis[chis<8000]-chiav)**2/(2*sigma**2))*cosmo_functions.D_growth_chih_normz0(chis[chis<8000])
+        return Wg
+  
     
     redshift_bin=FIELD[1]
 
@@ -236,41 +251,44 @@ def Wg(chis, FIELD,number_of_clustering_bins,experiment="magic"):
         zs=np.linspace(zmin,zmax,100)#is this enough resolution
         normalisation=integrate.simps([lensing_kernels.dnilensdz(z,experiment)for z in zs],zs)
         
-        W=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,experiment)/normalisation
+        W=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,number_of_clustering_bins,experiment)/normalisation
         
         
     if FIELD[0]=="shear":
-        W=lensing_kernels.W("shear_"+str(redshift_bin),chis)
+        W=lensing_kernels.W("shear_"+str(redshift_bin),chis,number_of_clustering_bins)
         
-    return W*cosmo_functions.D_growth_chi_normz0(chis) #include growth factor in definition of Wg.
+    return W#*cosmo_functions.D_growth_chi_normz0(chis) #include growth factor in definition of Wg.
  
-def firstderiv_Wg(chi,FIELD,number_of_clustering_bins):
+def firstderiv_Wg(chi,FIELD,number_of_clustering_bins,test=False):
     #compute the first derivative 
     
-    deltachi=chi*0.000001
-    return (Wg(chi+deltachi,FIELD,number_of_clustering_bins)-Wg(chi-deltachi,FIELD,number_of_clustering_bins))/(2*deltachi)
+    deltachi=chi*0.00001
+    return (Wg(chi+deltachi,FIELD,number_of_clustering_bins,"magic",test)-Wg(chi-deltachi,FIELD,number_of_clustering_bins,"magic",test))/(2*deltachi)
 
-def secondderiv_wg(chi,FIELD,number_of_clustering_bins):
+def secondderiv_wg(chi,FIELD,number_of_clustering_bins,test=False):
     
-    deltachi=chi*0.000001
-    return (Wg(chi-deltachi,FIELD,number_of_clustering_bins)+Wg(chi+deltachi,FIELD,number_of_clustering_bins)-2*Wg(chi,FIELD,number_of_clustering_bins))/(deltachi**2)
+    deltachi=chi*0.00001
+    return (Wg(chi-deltachi,FIELD,number_of_clustering_bins,"magic",test)+Wg(chi+deltachi,FIELD,number_of_clustering_bins,"magic",test)-2*Wg(chi,FIELD,number_of_clustering_bins,"magic",test))/(deltachi**2)
 
     
-def dl_wg_ell_independent(chi,FIELD,number_of_clustering_bins):
+def dl_wg_ell_independent(chi,FIELD,number_of_clustering_bins,test=False):
     
      #there is a derivative operator defined in equation 2.24 of 1705.05022. This computes the ell-independent part of it.
-     return -secondderiv_wg(chi,FIELD,number_of_clustering_bins)+2/chi*firstderiv_Wg(chi,FIELD,number_of_clustering_bins)
+     return -secondderiv_wg(chi,FIELD,number_of_clustering_bins,test)+2/chi*firstderiv_Wg(chi,FIELD,number_of_clustering_bins,test)
  
     
 #now i interpolate the dl_wg_ell_independent because it would take a lONG time to compute the derivative numerically each time!!
-chis=np.linspace(2e-6,13000,1000) #is this enough chi-sampling? I should change this.
+chis=np.linspace(2e-6,7400,1000) #is this enough chi-sampling? I should change this.
 
 number_of_clustering_bins=4
 
-W_interp=interp1d(chis,Wg(chis,["density",0,"magic"],number_of_clustering_bins))
-W_interp_shears=[interp1d(chis,Wg(chis,["shear",i,"magic"],number_of_clustering_bins))for i in range(0,10)]
-interp_dlwg_clustering=interp1d(chis,dl_wg_ell_independent(chis,["density",0,"magic"],number_of_clustering_bins))
-interp_dlwg_shears=[interp1d(chis,dl_wg_ell_independent(chis,["shear",i,"magic"],number_of_clustering_bins))for i in range(0,10)]
+W_interp=interp1d(chis,Wg(chis,["density",0,"magic"],number_of_clustering_bins,"magic",test))
+print("done first interp")
+if not test:
+    W_interp_shears=[interp1d(chis,Wg(chis,["shear",i,"magic"],number_of_clustering_bins,test))for i in range(0,10)]
+
+interp_dlwg_clustering=interp1d(chis,dl_wg_ell_independent(chis,["density",0,"magic"],number_of_clustering_bins,test))
+interp_dlwg_shears=[interp1d(chis,dl_wg_ell_independent(chis,["shear",i,"magic"],number_of_clustering_bins,test))for i in range(0,10)]
 
 
 
@@ -304,7 +322,7 @@ def Dl_wg(chi,ell,FIELD,experiment):
 
 
 
-def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment):
+def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment,test=False):
     if np.max(ells>11):
         print("using wrong intwgalaxy at ell =",ells)
     #parameters: ells = array of ells. note ELLS MUST BE BELOW 11
@@ -321,9 +339,16 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment):
     FIELD1=SPECTRUM[0]
     FIELD2=SPECTRUM[1]
     
-    
+   
     chimin=cosmo_functions.comoving_distance(0.2) #adapt this.
+    
+    #the window function is exactly zero outside of this range so this should be okay.
+    
     chimax=cosmo_functions.comoving_distance(0.4) #adapt this.
+    
+    if test:
+        chimin = 3000 - 5*300
+        chimax=3000+5*300
     chis=np.linspace(chimin,chimax,chiresolution)
     
     t_independen_multiplicitave_factor=chis[:,np.newaxis]**(1-nus)#returns chi times nu array
@@ -335,6 +360,10 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment):
         #regardless there are only about 10 ells here.
     
         first=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)) #chi times t
+        
+       # for i in range(0,chiresolution):
+#        plt.show()
+        #    plt.plot(Dl_wg(chis[i,np.newaxis]*ts,ell,FIELD2,experiment),ts)
     
         second=Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment)#chi times t
         
@@ -344,14 +373,17 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment):
         firstplussecond=first[:,:,np.newaxis]+secondmultipliedbytfactor #chi times t times nu
     
         total=(Dl_wg(chis,ell,FIELD1,experiment)[:,np.newaxis,np.newaxis])*firstplussecond #chi times t times nu
-     
+           
+       # plt.plot(chis,Dl_wg(chis,ell,FIELD1,experiment),'o')
+        #plt.show()
+        
         total_integrand=t_independen_multiplicitave_factor[:,np.newaxis,:]*total #chi times t times nu
                     
         answer[ell_index]=integrate.simps(total_integrand,chis,axis=0)
    
     return answer #an ellxt -times nu shaped array.
 
-def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment):
+def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment,test=False):
     
     
     #because we have DIFFERENT t-arrays to integrate over at each (ell,nu) it is most convenient to put this in a different
@@ -371,6 +403,9 @@ def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment):
     
     chimin=cosmo_functions.comoving_distance(0.2) #change this
     chimax=cosmo_functions.comoving_distance(0.4)#change this
+    if test:
+        chimin = 3000 - 5*300
+        chimax=3000+5*300
     chis=np.linspace(chimin,chimax,chiresolution)
     
     t_independen_multiplicitave_factor=chis**(1-nus[:,np.newaxis])*Dl_wg(chis,ell,FIELD1,experiment)#returns chi-shaped array
@@ -427,7 +462,7 @@ def Min_T(ell,nu):
  
 
 
-def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
+def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,test=False):
     
     #clgnu in the mathematica nb
     print("getting",SPECTRUM)
@@ -440,7 +475,7 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
 
     fact2lessthan10=i_ell_tarray(ells[ells<11],nus,ts) #txnu shaped array
     
-    fact1=intWgalaxy_lowell(ells[ells<11],nus,ts,chiresolution,SPECTRUM,experiment)#ellxtxnushaped array
+    fact1=intWgalaxy_lowell(ells[ells<11],nus,ts,chiresolution,SPECTRUM,experiment,test)#ellxtxnushaped array
  
        
     integrand=fact1*fact2lessthan10 
@@ -453,7 +488,7 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
           
             if np.max(mints)>(1-1e-5):
                 print("t problem",mints[mints>1-1e-5])
-            fact1=intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment) 
+            fact1=intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment,test) 
                #this is nu x tres
                 #the problem is that when we take different mints then ts changes. 
                 #some of this is not spectrum-specific which means we only need to do it ONCE, which is useful.
@@ -465,6 +500,28 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment):
             for nu_index, nu in enumerate(nus):
                 mint=mints[nu_index]
                 ts=np.linspace(mint,1-1e-5,tresolution)
+                if(nu_index%10==0):
+                    plt.figure(figsize=(15,5))
+                    plt.subplot(121)
+                    plt.plot(ts,integrand[nu_index,:].real,'o')
+                    plt.subplot(122)
+                    plt.plot(ts,integrand[nu_index,:].imag,'o')
+                    print(ell,nu)
+                    plt.show()
+                    plt.figure(figsize=(15,5))
+                    plt.subplot(121)
+                    plt.plot(ts,fact1[nu_index,:].real,'o')
+                    plt.subplot(122)
+                    plt.plot(ts,fact1[nu_index,:].imag,'o')
+                    print(ell,nu)
+                    plt.show()
+                    plt.figure(figsize=(15,5))
+                    plt.subplot(121)
+                    plt.plot(ts,fact2[nu_index,:].real,'o')
+                    plt.subplot(122)
+                    plt.plot(ts,fact2[nu_index,:].imag,'o')
+                    print(ell,nu)
+                    plt.show()
                 answer[ell_index,nu_index]= integrate.simps(integrand[nu_index,:],ts)#remember to change t! ts is different for every nu
     print("found",SPECTRUM,"in",time.time()-time1,"seconds" )
 
@@ -513,7 +570,18 @@ def Pk(k,kh=False,Ph=False,linear=True):
     return answer
 
 def to_transform(k):
+    
+    if test:
+        return 1/k*Pk(k,True,True)*np.exp(-((k)/10)**2)
+   # print(test)
     return 1/(k)*Pk(k)*np.exp(-((k)/10)**2)#Pk(k,True,True)*np.exp(-((k)/10)**2)
+
+def to_transform2(k):
+    
+    if test:
+        return 1/k*Pk(k,True,True)*np.exp(-((k)/10)**2)
+   # print(test)
+    return k**3*Pk(k)*np.exp(-((k)/10)**2)#Pk(k,True,True)*np.exp(-((k)/10)**2)
 
 
 cns,fns=coeffs(to_transform,200,1e-8,52,1.9)
@@ -536,7 +604,7 @@ def interpolated_minT(ell,nu):
     return jj(nu.imag,ell)                     
                                                
 
-def _Cls_Exact_Wrapper(FIELD,ells,tresolution,chiresolution,maxfreq,number_of_clustering_bins,experiment=None):
+def _Cls_Exact_Wrapper(FIELD,ells,tresolution,chiresolution,maxfreq,number_of_clustering_bins,bias,experiment=None,test=False):
     
     
     #FIELD SHOULD BE LIKE ["DENSITY", i] OR ["SHEAR",i] WITH i THE REDSHFIT BIN
@@ -577,18 +645,19 @@ def _Cls_Exact_Wrapper(FIELD,ells,tresolution,chiresolution,maxfreq,number_of_cl
         
         redshift_bin=FIELD[1]
 
-        shear_fields=[["shear",i ]for i in range(0,10)]
+        shear_fields=[["shear",i ]for i in range(0,number_of_clustering_bins)]
         
-        for i in range(0,source_bins):
+        
+        for i in range(0,number_of_clustering_bins):
             #COME BACK TO THIS
                    print("getting bin",i)
-                   SPECTRUM=[FIELD,shear_fields[i]]
-                   bini_powerspectra[number_of_clustering_bins+i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment)#galaxy galaxy lensing
+                   SPECTRUM=[FIELD,density_fields[i]]
+                   bini_powerspectra[i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias)#galaxy galaxy lensing
                 #bini_powerspectra[number_of_clustering_bins+i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq)
         
         
-        SPECTRUM=[FIELD,FIELD]
-        bini_powerspectra[redshift_bin,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment) #AUTO POWER SPECTRUM
+       # SPECTRUM=[FIELD,FIELD]
+       # bini_powerspectra[redshift_bin,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,test) #AUTO POWER SPECTRUM
         
         return bini_powerspectra
     else:
@@ -596,8 +665,7 @@ def _Cls_Exact_Wrapper(FIELD,ells,tresolution,chiresolution,maxfreq,number_of_cl
         return 
                                                
 
-def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment):
-    bias=1.9   #BIAS FOR FOURIER TRANSFORMING THE POWER SPECTRUM
+def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,test=False):
     
     kmin=1e-8
     kmax=52
@@ -605,19 +673,21 @@ def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment):
     
     cns,fns=coeffs(to_transform,Nmax,kmin,kmax,bias)
     
-    
-    xx=intIW(ells,fns,tresolution,chiresolution,SPECTRUM,experiment)
+    print(fns)
+    xx=intIW(ells,fns,tresolution,chiresolution,SPECTRUM,experiment,test)
     ans=np.sum(cns*xx,axis=1)/(2*np.pi**2)
 
     return (ans.real)
 
 Pnonlin=cosmo_functions.Pnonlin
+Plin=cosmo_functions.Plin
+
 source_bins=10
 
 
-def _Cls_Limber_Wrapper(spec,ls,resolution,number_of_clustering_bins,experiment=None):
+def _Cls_Limber_Wrapper(spec,ls,resolution,number_of_clustering_bins,experiment=None,test=False):
     
-    if spec[0]=="shear":
+    if  spec[0]=="shear" and not test:
         shears=["shear_"+str(i)for i in range(0,source_bins)]
     
         shear_powerspectra=np.zeros((source_bins,source_bins,len(ls)))
@@ -627,7 +697,7 @@ def _Cls_Limber_Wrapper(spec,ls,resolution,number_of_clustering_bins,experiment=
         zs=np.linspace(0.01,4,resolution)
         chis=cosmo_functions.comoving_distance(zs)
         for i in range(0,source_bins):
-                 Ws[i,:]=lensing_kernels.W(shears[i],chis)   
+                 Ws[i,:]=lensing_kernels.W(shears[i],chis,number_of_clustering_bins)   
                  
                  
         for i in range(0,source_bins):
@@ -649,29 +719,60 @@ def _Cls_Limber_Wrapper(spec,ls,resolution,number_of_clustering_bins,experiment=
         redshift_bin=spec[1]
         zmin=z_bin_boundaries[redshift_bin]
         zmax=z_bin_boundaries[redshift_bin+1]
+        
+        
 
         galaxy_bias=0.95/cosmo_functions.D_growth_norm1_z0(cosmo_functions.z2a((zmin+zmax)/2))
         
-        
+        if test:
+            zmin=cosmo_functions.redshift(3000-5*300)
+            zmax=cosmo_functions.redshift(3000+5*300)
+            galaxy_bias=1
+       #     print(zmin,zmax)
 
         zs=np.linspace(zmin,zmax,resolution)
         chis=cosmo_functions.comoving_distance(zs)
         W_clustering=np.zeros(len(chis))
+        if not test:
+            normalisation=integrate.simps([lensing_kernels.dnilensdz(z,experiment)for z in zs],zs)
+        if test:
+            normalisation = 1
+            
+        if not test:
         
-        normalisation=integrate.simps([lensing_kernels.dnilensdz(z,experiment)for z in zs],zs)
+            W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,number_of_clustering_bins,experiment)/normalisation
         
-        W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,experiment)/normalisation
+        
+        if test:
+        #    print("w plot")
+            W_clustering=Wg(chis, "a",number_of_clustering_bins,"magic",True)
+         #   plt.plot(chis,W_clustering)
+          #  plt.show()
+            
+       
         
         Ws=np.zeros((source_bins,resolution))
         
-        
-        for i in range(0,source_bins):
-                if(zmin<lensing_kernels.boundaries_sources[i+1]) :  #want the lenses to be BEHIND the clustering galaxies
-                    Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis) 
+        if not test:
+            for i in range(0,source_bins):
+                    if(zmin<lensing_kernels.boundaries_sources[i+1])  :  #want the lenses to be BEHIND the clustering galaxies
+                        Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis,number_of_clustering_bins) 
                     
-                bini_powerspectra[number_of_clustering_bins+i,:]=Cls_limber(ls,W_clustering,Ws[i],Pnonlin,chis,zs)
+                    bini_powerspectra[number_of_clustering_bins+i,:]=Cls_limber(ls,W_clustering,Ws[i],Pnonlin,chis,zs)
         
-        bini_powerspectra[redshift_bin,:]=Cls_limber(ls,W_clustering,W_clustering,Pnonlin,chis,zs)
+        if not test:
+        
+            bini_powerspectra[redshift_bin,:]=Cls_limber(ls,W_clustering,W_clustering,Plin,chis,zs)
+        else:
+            for ell_index,ell in enumerate(ls):
+           #     print("integrand plot")
+                integrand=1/chis**2*(W_clustering*W_clustering)*Pk((ell+1/2)/chis,True,True) 
+                bini_powerspectra[redshift_bin,ell_index]=integrate.simps(integrand,chis)
+            #    plt.plot(chis,integrand)
+             #   plt.show()
+              #  print([[chis[i],(Pk((ell+1/2)/chis)[i],True,True)] for i in range(0,len(chis))])
+                #plt.plot(chis,Pk((ell+1/2)/chis,True,True))
+               # plt.show()
         
         return bini_powerspectra
     else:
