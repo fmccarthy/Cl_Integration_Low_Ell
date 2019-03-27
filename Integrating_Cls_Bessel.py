@@ -37,7 +37,7 @@ omegam=cosmo_functions.omegam
 
 
 def coeffs(function,Nmax,kmin,kmax,bias,test=False):
-    
+    print(bias)
     #freturns ourier transform coefficients and frequencies
     #parameters: function = function that will be transformed 
     #            Nmax = number of Fourier frequencies required
@@ -278,17 +278,17 @@ def dl_wg_ell_independent(chi,FIELD,number_of_clustering_bins,test=False):
  
     
 #now i interpolate the dl_wg_ell_independent because it would take a lONG time to compute the derivative numerically each time!!
-chis=np.linspace(2e-6,7400,1000) #is this enough chi-sampling? I should change this.
+chis=np.linspace(2e-6,13000,1000) #is this enough chi-sampling? I should change this.
 
 number_of_clustering_bins=4
 
-W_interp=interp1d(chis,Wg(chis,["density",0,"magic"],number_of_clustering_bins,"magic",test))
+W_interp=interp1d(chis,Wg(chis,["density",1,"magic"],number_of_clustering_bins,"magic",test))
 print("done first interp")
 if not test:
-    W_interp_shears=[interp1d(chis,Wg(chis,["shear",i,"magic"],number_of_clustering_bins,test))for i in range(0,10)]
+    W_interp_densities=[interp1d(chis,Wg(chis,["density",i,"magic"],number_of_clustering_bins,"magic",test))for i in range(0,number_of_clustering_bins)]
 
-interp_dlwg_clustering=interp1d(chis,dl_wg_ell_independent(chis,["density",0,"magic"],number_of_clustering_bins,test))
-interp_dlwg_shears=[interp1d(chis,dl_wg_ell_independent(chis,["shear",i,"magic"],number_of_clustering_bins,test))for i in range(0,10)]
+#interp_dlwg_clustering=interp1d(chis,dl_wg_ell_independent(chis,["density",i,"magic"],number_of_clustering_bins,test))
+interp_dlwg_densities=[interp1d(chis,dl_wg_ell_independent(chis,["density",i,"magic"],number_of_clustering_bins,test))for i in range(0,number_of_clustering_bins)]
 
 
 
@@ -297,7 +297,7 @@ def interpolated_Wg(chis,FIELD):
     #returns the correct interpolated window function. maybe i should put this in lensing_kernels??
     
     if FIELD[0]=="density":     
-        return W_interp(chis)
+        return W_interp_densities[FIELD[1]](chis)
     else:   
         return W_interp_shears[FIELD[1]](chis)
 
@@ -306,7 +306,7 @@ def interp_dlwg_first(chis,FIELD):
       #returns the correct interpolated first (ell-independent) part of the dl_wg operator acting on the appropriate field. 
 
     if FIELD[0]=="density":
-          return interp_dlwg_clustering(chis)
+          return interp_dlwg_densities[FIELD[1]](chis)
     elif FIELD[0]=="shear":
         return interp_dlwg_shears[FIELD[1]](chis)
 
@@ -340,11 +340,11 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,experiment,test=False):
     FIELD2=SPECTRUM[1]
     
    
-    chimin=cosmo_functions.comoving_distance(0.2) #adapt this.
+    chimin=cosmo_functions.comoving_distance(0.4      ) #adapt this.
     
     #the window function is exactly zero outside of this range so this should be okay.
     
-    chimax=cosmo_functions.comoving_distance(0.4) #adapt this.
+    chimax=cosmo_functions.comoving_distance(0.6) #adapt this.
     
     if test:
         chimin = 3000 - 5*300
@@ -401,8 +401,8 @@ def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,experiment,tes
     FIELD1=SPECTRUM[0]
     FIELD2=SPECTRUM[1]
     
-    chimin=cosmo_functions.comoving_distance(0.2) #change this
-    chimax=cosmo_functions.comoving_distance(0.4)#change this
+    chimin=cosmo_functions.comoving_distance(0.4) #change this
+    chimax=cosmo_functions.comoving_distance(0.6)#change this
     if test:
         chimin = 3000 - 5*300
         chimax=3000+5*300
@@ -500,6 +500,7 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,test=False):
             for nu_index, nu in enumerate(nus):
                 mint=mints[nu_index]
                 ts=np.linspace(mint,1-1e-5,tresolution)
+                '''
                 if(nu_index%10==0):
                     plt.figure(figsize=(15,5))
                     plt.subplot(121)
@@ -522,6 +523,7 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,test=False):
                     plt.plot(ts,fact2[nu_index,:].imag,'o')
                     print(ell,nu)
                     plt.show()
+                '''
                 answer[ell_index,nu_index]= integrate.simps(integrand[nu_index,:],ts)#remember to change t! ts is different for every nu
     print("found",SPECTRUM,"in",time.time()-time1,"seconds" )
 
@@ -645,7 +647,7 @@ def _Cls_Exact_Wrapper(FIELD,ells,tresolution,chiresolution,maxfreq,number_of_cl
         
         redshift_bin=FIELD[1]
 
-        shear_fields=[["shear",i ]for i in range(0,number_of_clustering_bins)]
+        density_fields=[["density",i ]for i in range(0,number_of_clustering_bins)]
         
         
         for i in range(0,number_of_clustering_bins):
@@ -673,7 +675,7 @@ def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,te
     
     cns,fns=coeffs(to_transform,Nmax,kmin,kmax,bias)
     
-    print(fns)
+   # print(fns)
     xx=intIW(ells,fns,tresolution,chiresolution,SPECTRUM,experiment,test)
     ans=np.sum(cns*xx,axis=1)/(2*np.pi**2)
 
