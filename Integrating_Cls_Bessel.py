@@ -714,6 +714,14 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
                 if i<=j:
                     SPECTRUM=[density_fields[i],density_fields[j]]
                     Cl[i,j,:]=Cl[j,i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)#galaxy galaxy lensing
+        
+        
+        
+            for j in range(0,source_bins):
+                SPECTRUM=[density_fields[i],shear_fields[j]]
+                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
+                
+                
                 
         return Cl
                                                
