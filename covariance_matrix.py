@@ -20,6 +20,8 @@ import cosmo_functions
 
 import lensing_kernels
 
+import Integrating_Cls_Bessel
+
 import time
 
 H0=cosmo_functions.H0
@@ -121,11 +123,36 @@ def Cls(spec,ls,resolution,number_of_clustering_bins,experiment=None):
         print("spec problem; spec is",spec)
         return 
 
-        
-        
+def Signal_Covariance_Matrix_Sparse(ls,number_of_clustering_bins,limber_threshold,zresolution_clusteringbins_limber,zresolution_shearbins_limber,tresolution_exact,chiresolution_exact,maxfreq,experiment):
+    
+    # arguments: ls                     = sparse ls you will evaluate at
+    # number_of_clustering_bins         = number of redshift bins for clustering
+    # limber_threshold                  = value of l where you switch to Limber approximation
+    # zresolution_clusteringbins_limber = zresolution for the limber approximation for the power spectra involving clustering
+    # zresolution_shearbins_limber      = zresolution for the limber approximation for the shear-shear power spectra
+    # tresolution_exact                 = t resolution for the exact Bessel integration
+    # chiresolution_exact               = z resolution for same
+    # maxfreq                           = number of frequencies for Fourier transform in Bessel integration 
+    # experiment                        = will specify experiment specs; "magic" or "LSST"
+    
+    
+    
+    N_field=N_fields(number_of_clustering_bins)
+
+    t1=time.time()
+    Cl_sparse=np.zeros((N_field,N_field,len(ls)))
+    
+    Cl_sparse[:,:,ls>=limber_threshold]=Signal_Covariance_Matrix_Sparse_Limber(ls[ls>=limber_threshold],zresolution_clusteringbins_limber,zresolution_shearbins_limber,number_of_clustering_bins,experiment)
+    t2=time.time()
+    print("found Limber power spectra in",t2-t1,"seconds")
+    bias=1.9
+    
+    Cl_sparse[:,:,ls<limber_threshold]=Integrating_Cls_Bessel._Cls_Exact_Wrapper(ls[ls<limber_threshold],tresolution_exact,chiresolution_exact,maxfreq,number_of_clustering_bins,bias,experiment=None,test=False)
+    print("found rest in ",time.time()-t2,"seconds")
+    return Cl_sparse
         
 
-def Signal_Covariance_Matrix_sparse(ls,zresolution_clusteringbins,zresolution_shearbins,number_of_clustering_bins,experiment):
+def Signal_Covariance_Matrix_Sparse_Limber(ls,zresolution_clusteringbins,zresolution_shearbins,number_of_clustering_bins,experiment):
     
     N_field=N_fields(number_of_clustering_bins)
 
@@ -256,8 +283,11 @@ def dCldb(covariance_matrix,number_of_clustering_bins): #param is the parameter 
         zmax=z_bin_boundaries[redshift_bin+1]
 
         galaxy_bias=0.95/cosmo_functions.D_growth_norm1_z0(cosmo_functions.z2a((zmin+zmax)/2))    
-        dCldb[redshift_bin,redshift_bin,redshift_bin,:]=2*covariance_matrix[redshift_bin,redshift_bin,:]/galaxy_bias
-        dCldb[redshift_bin,number_of_clustering_bins:,redshift_bin,:]= dCldb[redshift_bin,redshift_bin,number_of_clustering_bins:,:]=covariance_matrix[redshift_bin,number_of_clustering_bins:,:]
+        
+        dCldb[redshift_bin,:,redshift_bin,:]= dCldb[redshift_bin,redshift_bin,:,:]=covariance_matrix[redshift_bin,:,:]/galaxy_bias
+        
+        dCldb[redshift_bin,redshift_bin,redshift_bin,:]=2*covariance_matrix[redshift_bin,redshift_bin,:] #this has to be multiplied by two because of the b**2 factor.
+
         
     return dCldb
 
@@ -299,10 +329,7 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
                            *(galaxy_bias-1)
                            *fnl_factors[k,ell_index] for k in range(0,len(chis))]
                 Cl_fnlderivs[ell_index]=(integrate.simps(integrand,chis))
-            #    plt.plot(chis,integrand,'o')
-  #              plt.loglog(chis,integrand,'o')
-#            #    plt.show()
- #               plt.show()
+            
         bini_powerspectrafnlderivs[redshift_bin,:]=Cl_fnlderivs
         for i in range(0,source_bins):
             if(zmin<lensing_kernels.boundaries_sources[i+1]) :  #want the lenses to be BEHIND the clustering galaxies
@@ -330,7 +357,7 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
     
     
 
-def dCldfnl(number_of_clustering_bins,zresolution_clusteringbins,ls,experiment):
+def dCldfnl_limber(number_of_clustering_bins,zresolution_clusteringbins,ls,experiment):
     
     N_field=N_fields(number_of_clustering_bins)
 
@@ -346,21 +373,32 @@ def dCldfnl(number_of_clustering_bins,zresolution_clusteringbins,ls,experiment):
             dCldfnl[redshift_bin,:,:]=dCldfnl[:,redshift_bin,:]=Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clustering_bins,experiment)
     end1=time.time()
     print("got clustering power spectra derivatives in ", end1-start1,"seconds")
-
+    print(dCldfnl.shape)
     
     return dCldfnl
     
 
-def dCl_sparse(ls,zresolution_clusteringbins,zresolution_shearbins,number_of_clustering_bins,covariance_matrix,experiment):
-    
+def dCl_sparse(ls,covariance_matrix,number_of_clustering_bins,limber_threshold,zresolution_clusteringbins_limber,zresolution_shearbins_limber,tresolution_exact,chiresolution_exact,maxfreq,experiment):
     
     dCl_sparse=np.zeros((1+number_of_clustering_bins,covariance_matrix.shape[0],covariance_matrix.shape[1],covariance_matrix.shape[2]))
-    
-    
+
     
     dCl_sparse[1:,:,:,:]=dCldb(covariance_matrix,number_of_clustering_bins)
+  #  print("dcdb shape,",dCldb.shape)
+
+    t1=time.time()
+    print("computing cl derivatives in the limber approximation")
+    x=dCldfnl_limber(number_of_clustering_bins,zresolution_clusteringbins_limber,ls[ls>=limber_threshold],experiment)
+   # print("computed x shape",x.shape)
+   
+
+    dCl_sparse[0,:,:,:][:,:,ls>=limber_threshold]=x
+    print("computed in",time.time()-t1,"seconds")
+    bias=1.9
     
-    dCl_sparse[0,:,:,:]=dCldfnl(number_of_clustering_bins,zresolution_clusteringbins,ls,experiment)
+    if np.min(ls)<limber_threshold:
+    
+        dCl_sparse[0,:,:,:][:,:,ls<limber_threshold]=Integrating_Cls_Bessel._Cls_fnl_derivs_Wrapper(ls[ls<limber_threshold],tresolution_exact,chiresolution_exact,maxfreq,number_of_clustering_bins,bias,experiment=None,test=False)
     
     return dCl_sparse
 

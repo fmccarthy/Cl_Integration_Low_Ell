@@ -550,10 +550,10 @@ def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,nbins,experime
                     mint=mints[nu_index]
                     ts=np.linspace(mint,1-1e-5,tresolution)
                     t_dependent_part=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)+ts**(nu-2)*Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment))#hopefully a chi *t shaped array
-                    print("tin",t_independen_multiplicitave_factor.shape)
-                    print("tdep",t_dependent_part.shape)
+                #    print("tin",t_independen_multiplicitave_factor.shape)
+                 #   print("tdep",t_dependent_part.shape)
                     total_integrand=t_independen_multiplicitave_factor[nu_index,:,np.newaxis]*t_dependent_part
-                    print(total_integrand.shape)
+                  #  print(total_integrand.shape)
                     answer[nu_index]=integrate.simps(total_integrand,chis,axis=0)
                     
             elif fnl_deriv:
@@ -814,14 +814,22 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
         density_fields=[["density",i]for i in range(0,number_of_clustering_bins)]
                 
         Cl=np.zeros((N_field,N_field,len(ells)))
-           
+        t1=time.time()
+        print("getting shear-shear powerspectra")
         for i in range(0,source_bins):
+            print("bin",i)
             for j in range(0,source_bins):
+                tt=time.time()
                 if i<=j:
                     SPECTRUM=[shear_fields[i],shear_fields[j]]
                     Cl[i+number_of_clustering_bins,j+number_of_clustering_bins,:]=Cl[j+number_of_clustering_bins,i+number_of_clustering_bins,:]=(ells*(ells+1))**2*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
-                              
+                print(i,"done in",time.time()-tt,"seconds")
+        t2=time.time()
+
+        print("found shears in",t2-t1,"seconds")
+        print("getting clustering power spectra")
         for i in range(0,number_of_clustering_bins):
+            print("bin ",i)
             for j in range(0,number_of_clustering_bins):
                 if i<=j:
                     SPECTRUM=[density_fields[i],density_fields[j]]
@@ -830,12 +838,12 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
         
         
             for j in range(0,source_bins):
-                print(i,j+number_of_clustering_bins)
+              #  print(i,j+number_of_clustering_bins)
                 SPECTRUM=[density_fields[i],shear_fields[j]]
-                print(SPECTRUM)
+             #   print(SPECTRUM)
                 Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
-                plt.loglog(ells,Cl[j+number_of_clustering_bins,i,:])
-                plt.show()
+              
+        print("found in",time.time()-t2,"seconds")
                 
                 
         return Cl
@@ -1061,8 +1069,8 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
                 Cl_fnlderivs[ell_index]=(integrate.simps(integrand,chis))
             
             bini_powerspectrafnlderivs[number_of_clustering_bins+i,:]=Cl_fnlderivs
-        end2=time.time()
-        
+      #  end2=time.time()
+         
         
         return bini_powerspectrafnlderivs
     
@@ -1098,10 +1106,12 @@ def _Cls_fnl_derivs_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clu
                 print(i,j+number_of_clustering_bins)
                 SPECTRUM=[density_fields[i],shear_fields[j]]
                 print(SPECTRUM)
-                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
-                plt.loglog(ells,Cl[j+number_of_clustering_bins,i,:])
-                plt.show()
+                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins,True)
+              #  plt.loglog(ells,Cl[j+number_of_clustering_bins,i,:])
+               # plt.show()
                 
                 
         return Cl
+    
+
 print("integrating_cls_bessel imported")
