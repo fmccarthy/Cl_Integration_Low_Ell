@@ -124,7 +124,7 @@ def Wkgal_lensing(chi,i): # i is the ith redshift bin, starting at 0!!!
 def Wkgal_lensing_workingforarrays(chis,i): # i is the ith redshift bin, starting at 0!!!
     
     #this might be sort of hard.
-    
+    chis=np.atleast_1d(chis)
     answer=np.zeros(len(chis))
     
     integrand=np.zeros((len(chis),10))

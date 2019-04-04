@@ -31,6 +31,8 @@ omegam=cosmo_functions.omegam
 
 
 Pnonlin=cosmo_functions.Pnonlin
+Plin=cosmo_functions.Plin
+
 
 
 '''
@@ -68,7 +70,7 @@ def Cls(spec,ls,resolution,number_of_clustering_bins,experiment=None):
         zs=np.linspace(0.01,4,resolution)
         chis=cosmo_functions.comoving_distance(zs)
         for i in range(0,source_bins):
-                 Ws[i,:]=lensing_kernels.W(shears[i],chis)   
+                 Ws[i,:]=lensing_kernels.W(shears[i],chis,number_of_clustering_bins)   
                  
                  
         for i in range(0,source_bins):
@@ -76,7 +78,7 @@ def Cls(spec,ls,resolution,number_of_clustering_bins,experiment=None):
             for j in range(0,source_bins):
                 Ws2=Ws[j]
                 if j>=i:
-                    shear_powerspectra[i,j]=shear_powerspectra[j,i]=Cls_limber(ls,Ws1,Ws2,Pnonlin,chis,zs)
+                    shear_powerspectra[i,j]=shear_powerspectra[j,i]=Cls_limber(ls,Ws1,Ws2,Plin,chis,zs)
                         
     
         return shear_powerspectra
@@ -101,18 +103,18 @@ def Cls(spec,ls,resolution,number_of_clustering_bins,experiment=None):
         
         normalisation=integrate.simps([lensing_kernels.dnilensdz(z,experiment)for z in zs],zs)
         
-        W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,experiment)/normalisation
+        W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,number_of_clustering_bins,experiment)/normalisation
         
         Ws=np.zeros((source_bins,resolution))
         
         
         for i in range(0,source_bins):
                 if(zmin<lensing_kernels.boundaries_sources[i+1]) :  #want the lenses to be BEHIND the clustering galaxies
-                    Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis) 
+                    Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis,number_of_clustering_bins) 
                     
-                bini_powerspectra[number_of_clustering_bins+i,:]=Cls_limber(ls,W_clustering,Ws[i],Pnonlin,chis,zs)
+                bini_powerspectra[number_of_clustering_bins+i,:]=Cls_limber(ls,W_clustering,Ws[i],Plin,chis,zs)
         
-        bini_powerspectra[redshift_bin,:]=Cls_limber(ls,W_clustering,W_clustering,Pnonlin,chis,zs)
+        bini_powerspectra[redshift_bin,:]=Cls_limber(ls,W_clustering,W_clustering,Plin,chis,zs)
         
         return bini_powerspectra
     else:
@@ -260,7 +262,6 @@ def dCldb(covariance_matrix,number_of_clustering_bins): #param is the parameter 
     return dCldb
 
 def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clustering_bins,experiment):
-        start=time.time()
         N_field=N_fields(number_of_clustering_bins)
         bini_powerspectrafnlderivs=np.zeros((N_field,len(ls)))
 
@@ -278,23 +279,21 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
         
         normalisation=integrate.simps([lensing_kernels.dnilensdz(z,experiment)for z in zs],zs)
         
-        W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,experiment)/normalisation
+        W_clustering=galaxy_bias*lensing_kernels.W("density_"+str(redshift_bin+1),chis,number_of_clustering_bins,experiment)/normalisation
         Ws=np.zeros((source_bins,zresolution_clusteringbins))
         Cl_fnlderivs=np.zeros(len(ls))
-        timef=time.time()
         fnl_factors=np.zeros((len(chis),len(ls)))
         for z_index in range(0,len(chis)):
             for l_index in range(0,len(ls)):
                 k=(ls[l_index]+1/2)/chis[z_index]
                 fnl_factors[z_index,l_index]=cosmo_functions.fnl_bias_factor(k,chis[z_index])
-        timef2=time.time()
         
         for ell_index,l in enumerate(ls):
                 Ks=(l+1/2)/chis
                 
                 
                 integrand=[2*W_clustering[k]*W_clustering[k]*
-                           Pnonlin(zs[k],(l+1/2)/chis[k])/chis[k]**2
+                           Plin(zs[k],(l+1/2)/chis[k])/chis[k]**2
                            *1/galaxy_bias*
                            1/Ks[k]**2
                            *(galaxy_bias-1)
@@ -305,10 +304,9 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
 #            #    plt.show()
  #               plt.show()
         bini_powerspectrafnlderivs[redshift_bin,:]=Cl_fnlderivs
-        end=time.time()
         for i in range(0,source_bins):
             if(zmin<lensing_kernels.boundaries_sources[i+1]) :  #want the lenses to be BEHIND the clustering galaxies
-                Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis) 
+                Ws[i,:]=lensing_kernels.W("shear_"+str(i),chis,number_of_clustering_bins) 
             
             Cl_fnlderivs=np.zeros(len(ls))
             
@@ -317,7 +315,7 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
             for ell_index,l in enumerate(ls):
                 Ks=(l+1/2)/chis
                 integrand=[Ws[i,k]*W_clustering[k]*
-                           Pnonlin(zs[k],(l+1/2)/chis[k])/chis[k]**2
+                           Plin(zs[k],(l+1/2)/chis[k])/chis[k]**2
                            *1/galaxy_bias*
                            1/Ks[k]**2
                            *(galaxy_bias-1)
@@ -326,7 +324,6 @@ def Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clus
                 Cl_fnlderivs[ell_index]=(integrate.simps(integrand,chis))
             
             bini_powerspectrafnlderivs[number_of_clustering_bins+i,:]=Cl_fnlderivs
-        end2=time.time()
         
         
         return bini_powerspectrafnlderivs
@@ -344,11 +341,9 @@ def dCldfnl(number_of_clustering_bins,zresolution_clusteringbins,ls,experiment):
     print("getting clustering power spectra derivatives")
     start1=time.time()
     for redshift_bin in range(0,number_of_clustering_bins):
-            start=time.time()
 
 
             dCldfnl[redshift_bin,:,:]=dCldfnl[:,redshift_bin,:]=Cls_fnlderivatives(redshift_bin,ls,zresolution_clusteringbins,number_of_clustering_bins,experiment)
-            end=time.time()
     end1=time.time()
     print("got clustering power spectra derivatives in ", end1-start1,"seconds")
 

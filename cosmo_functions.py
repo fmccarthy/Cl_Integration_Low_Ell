@@ -67,7 +67,7 @@ def D_growth( a):
                 D_camb = deltakz[0,:,0]/deltakz[0,0,0]
                 _da_interp = interp1d(atab, D_camb, kind='linear')
                 
-                return _da_interp(a)/_da_interp(1.0)*0.76 #hy 0.76? 5omegam/2 = 0.75.....
+                return _da_interp(a)/_da_interp(1.0)*5*omegam/2 #hy 0.76? 5omegam/2 = 0.75.....
 D_camb = deltakz[0,:,0]/deltakz[0,0,0]
 _da_interp = interp1d(atab, D_camb, kind='linear')
        
@@ -132,6 +132,11 @@ def fnl_bias_factor(k,chi):
     deltac= 1.42
     return 3*deltac*omegam*(H0/c)**2*(1/transferfunc2(k))*(1/growth(chi)) 
 
+def fnl_bias_factor_without_k(chi):
+    deltac= 1.42
+    return 3*deltac*omegam*(H0/c)**2*(1/D_growth(a(chi))) 
+    
+
 def factor_wo_growth(k):
     deltac= 1.42
     return 3*deltac*omegam*(H0/c)**2*(1/transferfunc2(k))
@@ -168,16 +173,26 @@ def transfer(k):   #i want to input a PHYSICAL k
             return interpolation(k)
         
 def transferfunc2(k): #i want to input a PHYSICAL k
+    k=np.atleast_1d(k)
     ks=trans.transfer_data[0,:,0]*( results.hubble_parameter(0)/100)#trans.transfer_data gives comoving k/h. MULTIPLY by H0/100 to get
                                                                     #physical k.
     ts=transferfunct2
     #plt.loglog(ks,ts)
+    answer=np.zeros(len(k))
+   # k[k<min(ks)]=min(ks)
+
     tran=interp1d(ks, ts,bounds_error=False,fill_value=0.)
-    if k>max(ks):
-        print (k, "is greater then",max(ks))
-    if k<min(ks):
-        print (k, "is less then",min(ks))
-    return tran(k)
+    
+    answer[k<min(ks)]=1
+    answer[k>min(ks)]=tran(k[k>min(ks)])
+
+    #answer[k<max(ks)]= tran(k[k<max(ks)])
+    
+   # if k>max(ks):
+    #    print (k, "is greater then",max(ks))
+   # if k<min(ks):
+    #    print (k, "is less then",min(ks))
+    return answer
     
 
 print("Got transfer function...")
