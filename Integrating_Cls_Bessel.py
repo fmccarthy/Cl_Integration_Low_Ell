@@ -93,15 +93,32 @@ def hypf(a,b,c,z):
     epsilon=1
     answer=0
     n=0
-    while(np.max(epsilon)>1e-10): #computes on arrays until ALL elements have converged here
+    while(np.max(epsilon)>1e-20): #computes on arrays until ALL elements have converged here
         previousanswer=answer
         answer=answer+term #starts at 1
         term=term*(a+n)*(b+n)/((c+n)*(n+1))*z 
         epsilon=np.abs((answer-previousanswer)/answer) #checks convergence
         n=n+1
     return answer
+def hypfnearone(ell,nu,t):
+    #hypergemetric function evaluated near one as needed to compute t near 1. see appendxix B of 1705.05022
+    
+    ##equation B5 of 1705.05022 as equation b6 did not work for me
+
+    #print(t.shape)
+    t1=-(1-t**2)**2
+    t2=(4*t**2)
+    ttilde=t1/t2
+    xx=special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
+    return xx
+    #return xx,ttilde,t,t1/t2,t1,t2,tt
+    
+    
+    
+    
     
 
+'''
 def hypfnearone(ell,nu,t):
     #hypergemetric function evaluated near one as needed to compute t near 1. see appendxix B of 1705.05022
     
@@ -110,8 +127,7 @@ def hypfnearone(ell,nu,t):
      ttilde=-(1-t**2)**2/(4*t**2)
      xx=special.gamma(ell+3/2)*t**(-ell-nu/2)*(special.gamma(nu-2)*t**(nu-2)*(1-t**2)**(2-nu)/(special.gamma((nu-1)/2)*special.gamma(ell+nu/2))*hypf((2*ell-nu+4)/4,(-2*ell-nu+2)/4,2-nu/2,ttilde)+special.gamma(2-nu)/(special.gamma(3/2-nu/2)*special.gamma(ell-nu/2+2))*hypf((2*ell+nu)/4,(-2*ell+nu-2)/4,nu/2,ttilde))
      return xx
-     
-
+'''
 def i_ell_floats(ell,nu,t):
     
     #do i still need this?
@@ -343,7 +359,7 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,nbins,experiment,fnlder
     #eg : take whether we apply Dl as an argument later as that is the main difference.
 
 
-
+    #this is the only part that has spectrum dependence. everything else is the same.
     if FIELD1[0]=="density":
         if FIELD2[0]=="density":
             
@@ -512,6 +528,161 @@ def intWgalaxy_lowell(ells,nus,ts,chiresolution,SPECTRUM,nbins,experiment,fnlder
 
 def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,nbins,experiment,fnl_deriv=False,test=False):
     
+   
+    
+    #because we have DIFFERENT t-arrays to integrate over at each (ell,nu) it is most convenient to put this in a different
+    #function than at low ell.
+    
+    #parameters: ell = one ell, note ELLS MUST BE ABOVE 10
+    #            nus = array of frequencies
+    #            tresolution = number of ts to be integrated over
+    #            SPECTRUM = relevant spectrum you want to compute. 
+    #                       should be a list of two FIELDs [FIELD1, FIELD2]
+    #                       where FIELD is a list of [type, redshift_bin] and 
+    #                       type is either "density" or "shear"    
+    mints=interpolated_minT(ell,nus)
+    redshift_bin=SPECTRUM[0][1]
+    FIELD1=SPECTRUM[0]
+    FIELD2=SPECTRUM[1]
+    if FIELD1[0]=="density":
+        if FIELD2[0]=="density":
+
+            z_bin_boundaries=bin_boundaries(nbins)
+    
+            zmin=z_bin_boundaries[redshift_bin]
+            zmax=z_bin_boundaries[redshift_bin+1]
+            
+            chimin=cosmo_functions.comoving_distance(zmin) 
+            chimax=cosmo_functions.comoving_distance(zmax)
+          
+            chis=np.linspace(chimin,chimax,chiresolution)
+            
+            if not fnl_deriv:
+    
+                t_independen_multiplicitave_factor=chis**(1-nus[:,np.newaxis])*Dl_wg(chis,ell,FIELD1,experiment)#returns chi-shaped array
+    
+                answer=np.zeros((len(nus),tresolution),dtype=np.complex_)
+                for nu_index,nu in enumerate(nus):
+                #it is too much for my computer to handle doing this as an array because nu x tresolution x chiresolution is crazy big
+                    mint=mints[nu_index]
+                    ts=np.linspace(mint,1-1e-5,tresolution)
+                    t_dependent_part=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)+ts**(nu-2)*Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment))#hopefully a chi *t shaped array
+                #    print("tin",t_independen_multiplicitave_factor.shape)
+                 #   print("tdep",t_dependent_part.shape)
+                    total_integrand=t_independen_multiplicitave_factor[nu_index,:,np.newaxis]*t_dependent_part
+                  #  print(total_integrand.shape)
+                    answer[nu_index]=integrate.simps(total_integrand,chis,axis=0)
+                    
+            elif fnl_deriv:
+                
+                zmin_2=z_bin_boundaries[FIELD2[1]]
+                zmax_2=z_bin_boundaries[FIELD2[1]+1]
+                    
+                galaxy_bias_1=0.95/cosmo_functions.D_growth_norm1_z0(cosmo_functions.z2a((zmin+zmax)/2))
+                galaxy_bias_2=0.95/cosmo_functions.D_growth_norm1_z0(cosmo_functions.z2a((zmin_2+zmax_2)/2))
+    
+                t_independen_multiplicitave_factor_1=chis**(1-nus[:,np.newaxis])*interpolated_Wg(chis,FIELD1)#returns chi-shaped array
+                t_independen_multiplicitave_factor_2=chis**(1-nus[:,np.newaxis])*Dl_wg(chis,ell,FIELD1,experiment)#returns chi-shaped array
+                answer=np.zeros((len(nus),tresolution),dtype=np.complex_)
+                for nu_index,nu in enumerate(nus):
+                #it is too much for my computer to handle doing this as an array because nu x tresolution x chiresolution is crazy big
+                    mint=mints[nu_index]
+                    ts=np.linspace(mint,1-1e-5,tresolution)
+                    
+                    t_dependent_part_1=(Dl_wg(chis[:,np.newaxis]*ts,ell,FIELD2,experiment)+ts**(nu-2)*Dl_wg(chis[:,np.newaxis]/ts,ell,FIELD2,experiment))#hopefully a chi *t shaped array
+                
+                    total_integrand_1=t_independen_multiplicitave_factor_1[nu_index,:,np.newaxis]*t_dependent_part_1/galaxy_bias_1*cosmo_functions.fnl_bias_factor_without_k(chis)[:,np.newaxis]*(galaxy_bias_1-1)
+                  #  print("this one",fnl_bias_factor_without_k.shape)
+                    
+                    t_dependent_part_2=(interpolated_Wg(chis[:,np.newaxis]*ts,FIELD2)+ts**(nu-2)*interpolated_Wg(chis[:,np.newaxis]/ts,FIELD2))#hopefully a chi *t shaped array
+                
+                    total_integrand_2=t_independen_multiplicitave_factor_2[nu_index,:,np.newaxis]*t_dependent_part_2/galaxy_bias_2*cosmo_functions.fnl_bias_factor_without_k(chis)[:,np.newaxis]*(galaxy_bias_2-1)
+#                    print("tdep",t_dependent_part_1.shape,t_dependent_part_2.shape)
+                   # print("tin",t_independen_multiplicitave_factor_1.shape,t_independen_multiplicitave_factor_2.shape)
+                #    print(total_integrand_2.shape)
+# #                   print(total_integrand_1.shape)
+                    
+                    answer[nu_index]=integrate.simps(total_integrand_1+total_integrand_2,chis,axis=0)
+          
+                #takes around 0.3 seconds
+        elif FIELD2[0]=="shear":
+            
+    
+            z_bin_boundaries=bin_boundaries(nbins)
+    
+            zmin=z_bin_boundaries[redshift_bin]
+            zmax=z_bin_boundaries[redshift_bin+1]
+            
+            chimin=cosmo_functions.comoving_distance(zmin) #change this
+            chimax=cosmo_functions.comoving_distance(zmax)#change this
+            '''
+            if test:
+                chimin = 3000 - 5*300
+                chimax=3000+5*300
+            '''
+            chis=np.linspace(chimin,chimax,chiresolution)
+                               
+
+            
+            if not fnl_deriv:
+    
+                t_independen_multiplicitave_factor=chis**(1-nus[:,np.newaxis])*Dl_wg(chis,ell,FIELD1,experiment)#returns chi-shaped array
+    
+    
+            elif fnl_deriv:
+                               
+                galaxy_bias=0.95/cosmo_functions.D_growth_norm1_z0(cosmo_functions.z2a((zmin+zmax)/2))
+
+                t_independen_multiplicitave_factor=chis**(1-nus[:,np.newaxis])*interpolated_Wg(chis,FIELD1)/galaxy_bias*cosmo_functions.fnl_bias_factor_without_k(chis)*(galaxy_bias-1)
+
+    
+            answer=np.zeros((len(nus),tresolution),dtype=np.complex_)
+            for nu_index,nu in enumerate(nus):
+                #it is too much for my computer to handle doing this as an array because nu x tresolution x chiresolution is crazy big
+                mint=mints[nu_index]
+                ts=np.linspace(mint,1-1e-5,tresolution)
+                t_dependent_part=(interpolated_Wg(chis[:,np.newaxis]*ts,FIELD2)+ts**(nu-2)*interpolated_Wg(chis[:,np.newaxis]/ts,FIELD2))#hopefully a chi *t shaped array
+                
+                total_integrand=t_independen_multiplicitave_factor[nu_index,:,np.newaxis]*t_dependent_part
+    
+                answer[nu_index]=integrate.simps(total_integrand,chis,axis=0)
+          
+                #takes around 0.3 seconds
+            
+            
+            
+    elif FIELD1[0]=="shear":
+        if FIELD2[0]=="shear":
+
+            FIELD1=SPECTRUM[0]
+            FIELD2=SPECTRUM[1]
+    
+            chimin=cosmo_functions.comoving_distance(0.01) #what should this be?
+            chimax=cosmo_functions.comoving_distance(lensing_kernels.boundaries_sources[redshift_bin+1])
+            chis=np.linspace(chimin,chimax,chiresolution)
+        
+    
+            t_independen_multiplicitave_factor=chis**(1-nus[:,np.newaxis])*interpolated_Wg(chis,FIELD1)#returns chi-shaped array
+    
+            answer=np.zeros((len(nus),tresolution),dtype=np.complex_)
+            for nu_index,nu in enumerate(nus):
+            #it is too much for my computer to handle doing this as an array because nu x tresolution x chiresolution is crazy big
+                mint=mints[nu_index]
+                ts=np.linspace(mint,1-1e-5,tresolution)
+                t_dependent_part=(interpolated_Wg(chis[:,np.newaxis]*ts,FIELD2)+ts**(nu-2)*interpolated_Wg(chis[:,np.newaxis]/ts,FIELD2))#hopefully a chi *t shaped array
+    
+                total_integrand=t_independen_multiplicitave_factor[nu_index,:,np.newaxis]*t_dependent_part
+            
+                answer[nu_index]=integrate.simps(total_integrand,chis,axis=0)
+          
+            #takes around 0.3 seconds
+        else:
+            print("deal with shear/density")
+            
+    return answer
+
+def intWgalaxy_highell2(ell,nus,tresolution,chiresolution,SPECTRUM,nbins,experiment,fnl_deriv=False,test=False):
+    
     
     #because we have DIFFERENT t-arrays to integrate over at each (ell,nu) it is most convenient to put this in a different
     #function than at low ell.
@@ -666,6 +837,7 @@ def intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,nbins,experime
 
 
 
+
 '''
 
 below i find the minimum T to start integrating at for each (ell,nu) such that the function I_ellnu(t) is 
@@ -700,7 +872,7 @@ def Min_T(ell,nu):
  
 
  
-def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,nbins,fnlderiv=False,test=False):
+def intIW(ells,nus,fact2lessthan10,tresolution,chiresolution,SPECTRUM,experiment,nbins,fnlderiv=False,test=False):
     
     #clgnu in the mathematica nb
 
@@ -709,12 +881,21 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,nbins,fnlderiv=
         
     ts=np.linspace(1e-5,1-1e-5,tresolution)
 
-    fact2lessthan10=i_ell_tarray(ells[ells<11],nus,ts) #txnu shaped array
+    t1=time.time()
     fact1=intWgalaxy_lowell(ells[ells<11],nus,ts,chiresolution,SPECTRUM,nbins,experiment,test,fnlderiv)#ellxtxnushaped array
        
-    integrand=fact1*fact2lessthan10 
+    integrand=fact1*fact2lessthan10 #this is ielltnu
+    
     answer[ells<11,:]= integrate.simps(integrand,ts,axis=1) 
-
+    
+    
+    tt=time.time()
+    mints=interpolated_minT(ells,nus) 
+    print("done low ell in",time.time()-t1,"ells are",len(ells[ells<11]))
+    
+    
+    
+    
     for ell_index, ell in enumerate(ells): 
         if ell>10:
             mints=interpolated_minT(ell,nus) 
@@ -735,6 +916,58 @@ def intIW(ells,nus,tresolution,chiresolution,SPECTRUM,experiment,nbins,fnlderiv=
                 ts=np.linspace(mint,1-1e-5,tresolution)
                 
                 answer[ell_index,nu_index]= integrate.simps(integrand[nu_index,:],ts)#remember to change t! ts is different for every nu         
+    print("rest done in",time.time()-tt,"seconds",len(ells[ells>=11]))
+    return answer
+
+def intIW2(ells,nus,fact2lessthan10,tresolution,chiresolution,SPECTRUM,experiment,nbins,fnlderiv=False,test=False):
+    
+    #clgnu in the mathematica nb
+
+    
+    answer=np.zeros((len(ells),len(nus)),dtype=np.complex_)
+        
+    ts=np.linspace(1e-5,1-1e-5,tresolution)
+
+    t1=time.time()
+    fact1=intWgalaxy_lowell(ells[ells<11],nus,ts,chiresolution,SPECTRUM,nbins,experiment,test,fnlderiv)#ellxtxnushaped array
+       
+    integrand=fact1*fact2lessthan10 #this is ielltnu
+    
+    answer[ells<11,:]= integrate.simps(integrand,ts,axis=1) 
+    
+    
+    tt=time.time()
+    
+    print("done low ell in",time.time()-t1,"ells are",len(ells[ells<11]))
+
+    
+    
+    fact1_highell=intWgalaxy_highell(ells,nus,tresolution,chiresolution,SPECTRUM,nbins,experiment,test,fnlderiv) 
+
+    
+    
+    
+    for ell_index, ell in enumerate(ells): 
+        if ell>10:
+            mints=interpolated_minT(ell,nus) 
+          
+            if np.max(mints)>(1-1e-5):
+                print("t problem",mints[mints>1-1e-5])
+            fact1=intWgalaxy_highell(ell,nus,tresolution,chiresolution,SPECTRUM,nbins,experiment,test,fnlderiv) 
+               #this is nu x tres
+                #the problem is that when we take different mints then ts changes. 
+                #some of this is not spectrum-specific which means we only need to do it ONCE, which is useful.
+                #however we have to do fact1 separately for each spectrum.
+                
+            fact2=i_ell(ell,nus,tresolution) #want nu x tres 
+           
+            integrand=fact1*fact2
+            for nu_index, nu in enumerate(nus):
+                mint=mints[nu_index]
+                ts=np.linspace(mint,1-1e-5,tresolution)
+                
+                answer[ell_index,nu_index]= integrate.simps(integrand[nu_index,:],ts)#remember to change t! ts is different for every nu         
+    print("rest done in",time.time()-tt,"seconds",len(ells[ells>=11]))
     return answer
 
 def Pkz(z,k,kh=False,Ph=False):
@@ -800,8 +1033,13 @@ for i,ell in enumerate(ls):
         
 jj=interp2d([nu.imag for nu in nus],np.array(ls),mints)  
 
+jjj=interp1d(np.array(ls),mints[:,0])
+
 def interpolated_minT(ell,nu):
-    return jj(nu.imag,ell)                     
+    return jj(nu.imag,ell)     
+
+def interpolated_minT_overells(ell):
+    return jjj(ell)                     
                                                
 
 def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clustering_bins,bias,experiment=None,test=False):
@@ -814,26 +1052,42 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
         density_fields=[["density",i]for i in range(0,number_of_clustering_bins)]
                 
         Cl=np.zeros((N_field,N_field,len(ells)))
+        
+            
+        kmin=1e-8
+        kmax=52
+        bias=1.9
+        cns,fns=coeffs(to_transform,maxfreq,kmin,kmax,bias)
+        cns=cns[0:int(maxfreq/2)+1]
+        fns=fns[0:int((maxfreq)/2)+1]
+        
+        ts=np.linspace(1e-5,1-1e-5,tresolution)
+        
+        fact2lessthan10=i_ell_tarray(ells[ells<11],fns,ts)
+
         t1=time.time()
         print("getting shear-shear powerspectra")
         for i in range(0,source_bins):
             print("bin",i)
+            t=time.time()
             for j in range(0,source_bins):
                 tt=time.time()
                 if i<=j:
                     SPECTRUM=[shear_fields[i],shear_fields[j]]
-                    Cl[i+number_of_clustering_bins,j+number_of_clustering_bins,:]=Cl[j+number_of_clustering_bins,i+number_of_clustering_bins,:]=(ells*(ells+1))**2*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
-                print(i,"done in",time.time()-tt,"seconds")
+                    Cl[i+number_of_clustering_bins,j+number_of_clustering_bins,:]=Cl[j+number_of_clustering_bins,i+number_of_clustering_bins,:]=(ells*(ells+1))**2*Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns[0:int(maxfreq/2)+1],fns[0:int((maxfreq)/2)+1],maxfreq,tresolution,chiresolution,experiment,number_of_clustering_bins)
+                print(j,"done in",time.time()-tt,"seconds")
+            print(i,"done in",time.time()-t,"seconds")
         t2=time.time()
 
         print("found shears in",t2-t1,"seconds")
         print("getting clustering power spectra")
         for i in range(0,number_of_clustering_bins):
             print("bin ",i)
+            tt=time.time()
             for j in range(0,number_of_clustering_bins):
                 if i<=j:
                     SPECTRUM=[density_fields[i],density_fields[j]]
-                    Cl[i,j,:]=Cl[j,i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)#galaxy galaxy lensing
+                    Cl[i,j,:]=Cl[j,i,:]=Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns[0:int(maxfreq/2)+1],fns[0:int((maxfreq)/2)+1],maxfreq,tresolution,chiresolution,experiment,number_of_clustering_bins)#galaxy galaxy lensing
         
         
         
@@ -841,7 +1095,7 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
               #  print(i,j+number_of_clustering_bins)
                 SPECTRUM=[density_fields[i],shear_fields[j]]
              #   print(SPECTRUM)
-                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins)
+                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns[0:int(maxfreq/2)+1],fns[0:int((maxfreq)/2)+1],maxfreq,tresolution,chiresolution,experiment,number_of_clustering_bins)
               
         print("found in",time.time()-t2,"seconds")
                 
@@ -849,20 +1103,13 @@ def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clusteri
         return Cl
                                                
 
-def Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,NBINS,fnlderiv=False,test=False):
-    
-    kmin=1e-8
-    kmax=52
-    Nmax=maxfreq
-    Nmax_deriv=500 #make an argument of the function and test convergence.
-    
-    if fnlderiv==False:
-        cns,fns=coeffs(to_transform,Nmax,kmin,kmax,bias)
-    elif fnlderiv==True:
-        Nmax=Nmax_deriv
-        cns,fns=coeffs(to_transform_for_derivative,Nmax_deriv,kmin,kmax,bias)
-    xx=intIW(ells,fns[0:int((Nmax)/2)+1],tresolution,chiresolution,SPECTRUM,experiment,NBINS,test,fnlderiv)
-    
+def Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns,fns,Nmax,tresolution,chiresolution,experiment,NBINS,fnlderiv=False,test=False):
+    print("okay in this version")
+   
+    print("computing intIW")
+    t=time.time()
+    xx=intIW(ells,fns,fact2lessthan10,tresolution,chiresolution,SPECTRUM,experiment,NBINS,test,fnlderiv) #this is spectrum dependent.
+    print("computed in",time.time()-t,"seconds")
     ans=np.sum(cns[0:int(Nmax/2)]*xx[:,0:int(Nmax/2)],axis=1)/(2*np.pi**2)
     
     answer=ans+np.conj(ans)+cns[int(Nmax/2)]*xx[:,int(Nmax/2)]/(2*np.pi**2)
@@ -1092,13 +1339,22 @@ def _Cls_fnl_derivs_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clu
         # for clustering - clustering we can find the derivaties again BUT we have this problem of 1/k**2 - THIS WILL NOT BE TRIVIAL
         # although - now we only need to perform the derivative on ONE of the chi's????
         # try this??
-           
+        
+        kmin=1e-8
+        kmax=52
+        bias=1.9
+        cns,fns=coeffs(to_transform_for_derivative,maxfreq,kmin,kmax,bias)
+        cns=cns[0:int(maxfreq/2)+1]
+        fns=fns[0:int((maxfreq)/2)+1]
+        
+
                                    
         for i in range(0,number_of_clustering_bins):
+            t1=time.time()
             for j in range(0,number_of_clustering_bins):
                 if i<=j:
                     SPECTRUM=[density_fields[i],density_fields[j]]
-                    Cl[i,j,:]=Cl[j,i,:]=Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins,True)#galaxy galaxy lensing
+                    Cl[i,j,:]=Cl[j,i,:]=Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns[0:int(maxfreq/2)+1],fns[0:int((maxfreq)/2)+1],maxfreq,tresolution,chiresolution,experiment,number_of_clustering_bins,True)#galaxy galaxy lensing
         
         
         
@@ -1106,9 +1362,10 @@ def _Cls_fnl_derivs_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clu
                 print(i,j+number_of_clustering_bins)
                 SPECTRUM=[density_fields[i],shear_fields[j]]
                 print(SPECTRUM)
-                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,tresolution,chiresolution,maxfreq,experiment,bias,number_of_clustering_bins,True)
+                Cl[i,j+number_of_clustering_bins,:]= Cl[j+number_of_clustering_bins,i,:]=(ells*(ells+1))*Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns[0:int(maxfreq/2)+1],fns[0:int((maxfreq)/2)+1],maxfreq,tresolution,chiresolution,experiment,number_of_clustering_bins,True)
               #  plt.loglog(ells,Cl[j+number_of_clustering_bins,i,:])
                # plt.show()
+            print("bin",i,"done in",time.time()-t1,"seconds")
                 
                 
         return Cl
