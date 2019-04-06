@@ -21,18 +21,18 @@ from scipy.interpolate import interp1d,interp2d
 from scipy import integrate, optimize, special
 
 import time
-
+import camb
 import cosmo_functions
-import lensing_kernels
+#import lensing_kernels
 
-import covariance_matrix
+#import covariance_matrix
 
 test=False
 
 #cosmological parameters
-H0=cosmo_functions.H0
-c=cosmo_functions.c
-omegam=cosmo_functions.omegam
+#H0=cosmo_functions.H0
+#c=cosmo_functions.c
+#omegam=cosmo_functions.omegam
 
 
 
@@ -285,7 +285,7 @@ chis=np.linspace(1,13000,1000) #is this enough chi-sampling? I should change thi
 
 number_of_clustering_bins=4 #change this to a parameter???
 
-
+'''
 if not test:
     W_interp_densities=[interp1d(chis,Wg(chis,["density",i,"magic"],number_of_clustering_bins,"magic",test))for i in range(0,number_of_clustering_bins)]
     W_interp_shears=[interp1d(chis,Wg(chis,["shear",i,"magic"],number_of_clustering_bins,"magic",test))for i in range(0,10)]
@@ -293,7 +293,7 @@ if not test:
 print("done first interp")
 interp_dlwg_densities=[interp1d(chis,dl_wg_ell_independent(chis,["density",i,"magic"],number_of_clustering_bins,test))for i in range(0,number_of_clustering_bins)]
 #i only need this for the density field 
-
+'''
 print("done derivative interpolations")
 
 def interpolated_Wg(chis,FIELD):
@@ -1017,7 +1017,7 @@ def to_transform_for_derivative(k):
     
     return 1/(k)*Pk(k)*np.exp(-((k)/10)**2)*(1/cosmo_functions.transferfunc2(k))#Pk(k,True,True)*np.exp(-((k)/10)**2)
 
-
+'''
 
 cns,fns=coeffs(to_transform,200,1e-8,52,1.9)
 ls=np.logspace(1,2,15)
@@ -1040,7 +1040,7 @@ def interpolated_minT(ell,nu):
 
 def interpolated_minT_overells(ell):
     return jjj(ell)                     
-                                               
+'''                                               
 
 def _Cls_Exact_Wrapper(ells,tresolution,chiresolution,maxfreq,number_of_clustering_bins,bias,experiment=None,test=False):
     
@@ -1115,12 +1115,12 @@ def Cls_Exact(ells,SPECTRUM,fact2lessthan10,cns,fns,Nmax,tresolution,chiresoluti
     answer=ans+np.conj(ans)+cns[int(Nmax/2)]*xx[:,int(Nmax/2)]/(2*np.pi**2)
 
     return (answer.real)
-
+'''
 Pnonlin=cosmo_functions.Pnonlin
 Plin=cosmo_functions.Plin
 
 source_bins=10
-
+'''
 
 def _Cls_Limber_Wrapper(spec,ls,resolution,number_of_clustering_bins,experiment=None,test=False):
     

@@ -1,7 +1,7 @@
 import numpy as np
 
+#from camb import get_matter_power_interpolator
 import camb
-
 
 from scipy.interpolate import interp1d
 
@@ -19,7 +19,7 @@ def dzdchi(chi):
 print("setting up cosmo functions")
 
 print("getting params from CAMB")
-
+'''
 params=camb.model.CAMBparams()
 params.set_cosmology(H0=0.6727*100, ombh2=0.022264244267999996, omch2=0.12055273725599998, omk=0.0)
 
@@ -28,7 +28,7 @@ H0=results.hubble_parameter(0)
 c=2.99792458e5 #km/s
 omegam=params.omegab+params.omegac
 print("params defined")
-
+'''
 def growth(chi): #growth function 
     sf=a(chi)
     aas=np.linspace(1e-3,sf,200)
@@ -52,6 +52,7 @@ def a2z(a):
 def z2a(z):
         return 1/(1+z)
 print("Defining growth function..")
+'''
 
 _amin = 0.00005   # minimum scale factor THIS SEEMS WAY TOO LOW CHANGE THIS???
 _amax = 1.0      # maximum scale factor
@@ -60,7 +61,7 @@ atab = np.linspace(_amin,_amax,_na)
 _ks = np.logspace(np.log10(1e-5),np.log10(1.),num=100) 
 _zs = a2z(atab)
 deltakz = results.get_redshift_evolution(_ks, _zs, ['delta_cdm']) #index: k,z,0
-    
+'''
 def D_growth( a):
         # D(a)
                 
@@ -68,8 +69,8 @@ def D_growth( a):
                 _da_interp = interp1d(atab, D_camb, kind='linear')
                 
                 return _da_interp(a)/_da_interp(1.0)*5*omegam/2 #hy 0.76? 5omegam/2 = 0.75.....
-D_camb = deltakz[0,:,0]/deltakz[0,0,0]
-_da_interp = interp1d(atab, D_camb, kind='linear')
+#D_camb = deltakz[0,:,0]/deltakz[0,0,0]
+#_da_interp = interp1d(atab, D_camb, kind='linear')
        
 def D_growth_norm1_z0( a):
         # D(a)
@@ -77,6 +78,7 @@ def D_growth_norm1_z0( a):
                
                 
                 return _da_interp(a)/_da_interp(1.0) #hy 0.76? 5omegam/2 = 0.75.....
+            
 def D_growth_chih_normz0(chi):
     
     #input chi in h^-1Mpc
@@ -98,7 +100,7 @@ def secondderivgrowth_h(chi):
     delta=chi*0.0001
     return (D_growth_chih_normz0(chi+delta)+D_growth_chih_normz0(chi-delta)-2*D_growth_chih_normz0(chi))/delta**2
 
-
+'''
 chis=np.linspace(0.01,8000,100)
 dgrowths=derivgrowth_h(chis)
 interp_dgrowthdchi=interp1d(chis,dgrowths)
@@ -110,7 +112,7 @@ interp_seconddgrowthdchi=interp1d(chis,ddgrowths)
 def d2growthdchi(chi):
     return interp_seconddgrowthdchi(chi)
 
-
+'''
 print("Growth function defined..")
 
 def get_power_spectra(params):
@@ -124,7 +126,7 @@ def get_power_spectra(params):
 print("Getting power spectra from CAMB")
 
 
-Plin,Pnonlin=get_power_spectra(params)
+#Plin,Pnonlin=get_power_spectra(params)
 
 print("Got power spectra")
 
@@ -144,7 +146,7 @@ print("Getting transfer function...")
 
 
 kmax=100
-
+'''
 
 pars = camb.CAMBparams()
 pars.set_cosmology(H0=0.6727*100, ombh2=0.022264244267999996, omch2=0.12055273725599998, omk=0.0)
@@ -159,7 +161,7 @@ transferfunct2=transferfunct2/transferfunct2[0]
 kh=trans.transfer_data[0,:,0] #this gives k/h . multiply by h to get physical k
 
 
-
+'''
 def transfer(k):   #i want to input a PHYSICAL k 
 
 
